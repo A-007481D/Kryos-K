@@ -30,9 +30,13 @@ bits 64
     mov esi, ebx
 
     ; Pass the physical address of pml4_table as the 3rd argument (RDX)
-    ; so that C code can unmap the lower half.
-    ; Since pml4_table is in .boot_bss, its symbol value is the physical address.
     mov edx, pml4_table
+
+    ; CRITICAL: The stack pointer (RSP) is currently pointing to low memory (e.g. 0x10XXXX).
+    ; We are about to unmap low memory in C, so we must move the stack pointer to its 
+    ; equivalent higher-half virtual address before we make any further function calls.
+    mov rax, 0xFFFFFFFF80000000
+    add rsp, rax
 
     ; Call the 64-bit C kernel entry point
     call kernel_main
