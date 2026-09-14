@@ -2,7 +2,7 @@ CC = gcc
 LD = ld
 ASM = nasm
 
-CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -mno-red-zone -mcmodel=kernel -Wall -Wextra -Werror -O2 -g -Iinclude
+CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -mcmodel=kernel -Wall -Wextra -Werror -O2 -g -Iinclude
 LDFLAGS = -m elf_x86_64 -T linker.ld -nostdlib
 ASMFLAGS = -f elf64
 
@@ -24,7 +24,7 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
-.PHONY: all clean iso run debug
+.PHONY: all clean iso run debug test
 
 all: $(KERNEL_ELF)
 
@@ -55,3 +55,6 @@ debug: iso
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+test:
+	python3 scripts/test_runner.py

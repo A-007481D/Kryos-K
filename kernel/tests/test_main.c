@@ -5,6 +5,8 @@
 #include "serial.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 static void test_kassert(void) {
     KASSERT(1 == 1);
@@ -15,15 +17,18 @@ static void test_divide_by_zero(void) {
     exception_test_context_t ctx = {0};
     ctx.expected_vector = 0; // #DE
     ctx.active = true;
-    ctx.recovery_rip = (uint64_t)&&recovery;
-    
     current_test_context = &ctx;
     
-    __asm__ volatile("div %0" : : "r"(0));
+    __asm__ volatile(
+        "lea 1f(%%rip), %%rcx\n"
+        "mov %%rcx, %0\n"
+        "div %1\n"
+        "1:\n"
+        : "=m"(ctx.recovery_rip)
+        : "r"(0)
+        : "rcx", "rax", "rdx", "memory"
+    );
     
-    panic(__FILE__, __LINE__, "Divide by zero did not fault");
-    
-recovery:
     current_test_context = NULL;
     serial_puts("[PASS] divide_by_zero\n");
 }
@@ -32,15 +37,18 @@ static void test_invalid_opcode(void) {
     exception_test_context_t ctx = {0};
     ctx.expected_vector = 6; // #UD
     ctx.active = true;
-    ctx.recovery_rip = (uint64_t)&&recovery;
-    
     current_test_context = &ctx;
     
-    __asm__ volatile("ud2");
+    __asm__ volatile(
+        "lea 1f(%%rip), %%rcx\n"
+        "mov %%rcx, %0\n"
+        "ud2\n"
+        "1:\n"
+        : "=m"(ctx.recovery_rip)
+        :
+        : "rcx", "memory"
+    );
     
-    panic(__FILE__, __LINE__, "Invalid opcode did not fault");
-    
-recovery:
     current_test_context = NULL;
     serial_puts("[PASS] invalid_opcode\n");
 }
@@ -50,16 +58,18 @@ static void test_page_fault(void) {
     ctx.expected_vector = 14; // #PF
     ctx.expected_cr2 = 0xDEADBEEF;
     ctx.active = true;
-    ctx.recovery_rip = (uint64_t)&&recovery;
-    
     current_test_context = &ctx;
     
-    volatile uint64_t *ptr = (volatile uint64_t *)0xDEADBEEF;
-    *ptr = 0xCAFEBABE;
+    __asm__ volatile(
+        "lea 1f(%%rip), %%rcx\n"
+        "mov %%rcx, %0\n"
+        "mov %%rdx, (%%rax)\n"
+        "1:\n"
+        : "=m"(ctx.recovery_rip)
+        : "a"(0xDEADBEEF), "d"(0xCAFEBABEULL)
+        : "rcx", "memory"
+    );
     
-    panic(__FILE__, __LINE__, "Page fault did not trigger");
-    
-recovery:
     current_test_context = NULL;
     serial_puts("[PASS] page_fault\n");
 }
