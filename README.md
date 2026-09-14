@@ -15,7 +15,8 @@ make iso
 make run
 ```
 
-## Current Status (Phase 0)
-- Multiboot2 32-bit bootstrap
-- C entry point
-- COM1 Serial output
+## Current Status (Phase 1)
+- 32-bit to 64-bit long mode transition
+- CPUID long-mode detection
+- Initial 4-level page tables (identity mapped)
+- True `x86_64` C execution environment
