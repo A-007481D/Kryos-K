@@ -2,7 +2,7 @@ CC = gcc
 LD = ld
 ASM = nasm
 
-CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -mno-red-zone -Wall -Wextra -Werror -O2 -g -Iinclude
+CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -mno-red-zone -mcmodel=kernel -Wall -Wextra -Werror -O2 -g -Iinclude
 LDFLAGS = -m elf_x86_64 -T linker.ld -nostdlib
 ASMFLAGS = -f elf64
 
