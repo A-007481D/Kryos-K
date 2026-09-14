@@ -17,11 +17,13 @@ header_start:
     dd 8    ; size
 header_end:
 
-section .bss
+section .boot_bss
 align 4096
 pml4_table:
     resb 4096
 pdpt_table:
+    resb 4096
+kernel_pdpt_table:
     resb 4096
 pd_table:
     resb 4096
@@ -31,16 +33,13 @@ stack_bottom:
     resb 16384 ; 16 KiB
 stack_top:
 
-section .text
+section .boot_text
 bits 32
 _start:
-    ; The bootloader has loaded us into 32-bit protected mode.
     ; Set up the stack.
     mov esp, stack_top
     
-    ; Multiboot2 bootloader passes EAX (magic) and EBX (info structure addr).
-    ; We push them onto the stack to preserve them across CPUID and paging functions,
-    ; since those functions will clobber registers.
+    ; Save Multiboot2 EAX and EBX
     push ebx
     push eax
     
@@ -53,11 +52,9 @@ _start:
     ; Load the 64-bit GDT
     lgdt [gdt64.pointer]
 
-    ; The transition: Paging is on and we have a 64-bit CS descriptor. 
-    ; Execute a far jump to officially enter long mode.
+    ; Far jump to 64-bit code segment
     jmp gdt64.code_segment:long_mode_start
 
-    ; If something goes wrong
 .halt:
     cli
     hlt
@@ -65,7 +62,6 @@ _start:
 
 ; --- CPUID Checks ---
 check_cpuid:
-    ; Check if CPUID is supported by attempting to flip the ID bit (bit 21) in EFLAGS
     pushfd
     pop eax
     mov ecx, eax
@@ -84,13 +80,11 @@ check_cpuid:
     jmp .no_cpuid
 
 check_long_mode:
-    ; Test if extended processor info is available
     mov eax, 0x80000000
     cpuid
     cmp eax, 0x80000001
     jb .no_long_mode
 
-    ; Use extended info to test if long mode is available
     mov eax, 0x80000001
     cpuid
     test edx, 1 << 29
@@ -102,28 +96,38 @@ check_long_mode:
 
 ; --- Page Tables ---
 set_up_page_tables:
-    ; 1. Explicitly zero out the page table memory (since it is in .bss)
+    ; 1. Zero out the page table memory (4 tables)
     mov edi, pml4_table
     xor eax, eax
-    mov ecx, 4096 * 3 / 4 ; 3 tables * 4096 bytes / 4 bytes per stosd
+    mov ecx, 4096 * 4 / 4 
     rep stosd
 
-    ; 2. Build PML4 -> PDPT -> PD
-    ; The page tables must be 4K aligned (which they are, via align 4096).
-    ; We set the Present (bit 0) and Read/Write (bit 1) flags.
+    ; 2. Build PML4
+    ; PML4[0] -> pdpt_table (Identity Map for lower half)
     mov eax, pdpt_table
     or eax, 0b11
     mov [pml4_table], eax
 
+    ; PML4[511] -> kernel_pdpt_table (Higher Half)
+    mov eax, kernel_pdpt_table
+    or eax, 0b11
+    mov [pml4_table + 511 * 8], eax
+
+    ; 3. Build PDPTs
+    ; pdpt_table[0] -> pd_table (Identity Map)
     mov eax, pd_table
     or eax, 0b11
     mov [pdpt_table], eax
 
-    ; 3. Build PD[0..511] to identity-map the first 1 GiB using 2 MiB huge pages.
-    mov ecx, 0         ; Counter
+    ; kernel_pdpt_table[510] -> pd_table (Higher Half: 0xFFFFFFFF80000000)
+    mov eax, pd_table
+    or eax, 0b11
+    mov [kernel_pdpt_table + 510 * 8], eax
+
+    ; 4. Build PD[0..511] to map the first 1 GiB of physical memory using 2 MiB huge pages.
+    mov ecx, 0
 
 .map_pd_table:
-    ; The physical address is ecx * 2 MiB
     mov eax, 0x200000  ; 2 MiB
     mul ecx
     ; Set Present (bit 0), Read/Write (bit 1), and Page Size (bit 7)
@@ -131,28 +135,24 @@ set_up_page_tables:
     mov [pd_table + ecx * 8], eax
 
     inc ecx
-    cmp ecx, 512       ; 512 entries in the table
+    cmp ecx, 512
     jne .map_pd_table
 
     ret
 
 enable_paging:
-    ; 1. Load CR3 with the physical address of the PML4
     mov eax, pml4_table
     mov cr3, eax
 
-    ; 2. Enable PAE (Physical Address Extension) in CR4
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-    ; 3. Enable LME (Long Mode Enable) in EFER MSR
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
     wrmsr
 
-    ; 4. Enable Paging in CR0
     mov eax, cr0
     or eax, 1 << 31
     mov cr0, eax
@@ -160,15 +160,13 @@ enable_paging:
     ret
 
 ; --- Temporary Bootstrap GDT ---
-section .rodata
+section .boot_rodata
 align 8
 gdt64:
     dq 0 ; null descriptor
 .code_segment: equ $ - gdt64
-    ; 64-bit code segment: Executable (43), Descriptor type (44), Present (47), 64-bit flag (53)
     dq (1 << 43) | (1 << 44) | (1 << 47) | (1 << 53)
 .data_segment: equ $ - gdt64
-    ; 64-bit data segment: Writable (41), Descriptor type (44), Present (47)
     dq (1 << 41) | (1 << 44) | (1 << 47)
 .pointer:
     dw $ - gdt64 - 1
