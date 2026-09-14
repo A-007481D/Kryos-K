@@ -2,9 +2,9 @@ CC = gcc
 LD = ld
 ASM = nasm
 
-CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -Wall -Wextra -Werror -O2 -g -Iinclude
-LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
-ASMFLAGS = -f elf32
+CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -nostartfiles -mno-red-zone -Wall -Wextra -Werror -O2 -g -Iinclude
+LDFLAGS = -m elf_x86_64 -T linker.ld -nostdlib
+ASMFLAGS = -f elf64
 
 BUILD_DIR = build
 ISO_DIR = $(BUILD_DIR)/isodir
@@ -14,6 +14,7 @@ KERNEL_ISO = $(BUILD_DIR)/kryos.iso
 
 OBJS = \
     $(BUILD_DIR)/arch/x86_64/boot/boot.o \
+    $(BUILD_DIR)/arch/x86_64/boot/long_mode_start.o \
     $(BUILD_DIR)/kernel/init/main.o \
     $(BUILD_DIR)/drivers/serial/serial.o
 
