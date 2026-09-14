@@ -1,4 +1,5 @@
 global _start
+global pml4_table
 extern long_mode_start
 
 section .multiboot2
@@ -17,7 +18,7 @@ header_start:
     dd 8    ; size
 header_end:
 
-section .boot_bss
+section .boot_bss nobits
 align 4096
 pml4_table:
     resb 4096

@@ -15,8 +15,8 @@ make iso
 make run
 ```
 
-## Current Status (Phase 1)
+## Current Status (Phase 2)
 - 32-bit to 64-bit long mode transition
-- CPUID long-mode detection
-- Initial 4-level page tables (identity mapped)
-- True `x86_64` C execution environment
+- Initial 4-level page tables with 1 GiB mapping using 2 MiB huge pages
+- Kernel executing at higher-half virtual address (`0xFFFFFFFF80000000`)
+- Low memory identity mapping strictly unmapped
