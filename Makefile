@@ -18,7 +18,8 @@ OBJS = \
     $(BUILD_DIR)/kernel/init/main.o \
     $(BUILD_DIR)/drivers/serial/serial.o \
     $(BUILD_DIR)/kernel/lib/stdio.o \
-    $(BUILD_DIR)/kernel/lib/assert.o
+    $(BUILD_DIR)/kernel/lib/assert.o \
+    $(BUILD_DIR)/kernel/interrupts/idt.o
 
 .PHONY: all clean iso run debug
 
