@@ -7,7 +7,7 @@
 #define PTE_PRESENT       (1ULL << 0)
 #define PTE_WRITABLE      (1ULL << 1)
 #define PTE_USER          (1ULL << 2)
-#define PTE_HUGE_PAGE     (1ULL << 7)
+#define PDE_PS            (1ULL << 7)
 #define PTE_NO_EXECUTE    (1ULL << 63)
 #define PTE_FRAME_MASK    0x000FFFFFFFFFF000ULL
 
@@ -49,7 +49,7 @@ static uint64_t* get_next_level(uint64_t* current_table, uint64_t index, bool al
     
     if (entry & PTE_PRESENT) {
         // Must reject if we hit a huge page when we expect a directory
-        if (entry & PTE_HUGE_PAGE) {
+        if (entry & PDE_PS) {
             return NULL;
         }
         
@@ -139,14 +139,14 @@ bool vmm_get_phys(uint64_t virt_addr, uint64_t *out_phys) {
     uint64_t pdpte = pdpt[pdpt_index(virt_addr)];
     if (!(pdpte & PTE_PRESENT)) return false;
     
-    if (pdpte & PTE_HUGE_PAGE) return false; 
+    if (pdpte & PDE_PS) return false; 
     
     uint64_t* pd = (uint64_t*)phys_to_virt(pdpte & PTE_FRAME_MASK);
     uint64_t pde = pd[pd_index(virt_addr)];
     if (!(pde & PTE_PRESENT)) return false;
     
     // 2 MiB Huge Page (used by boot code)
-    if (pde & PTE_HUGE_PAGE) {
+    if (pde & PDE_PS) {
         if (out_phys) {
             uint64_t huge_frame = pde & PTE_FRAME_MASK;
             uint64_t offset = virt_addr & 0x1FFFFF; // 2MB offset
