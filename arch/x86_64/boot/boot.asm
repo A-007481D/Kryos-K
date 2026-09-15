@@ -53,6 +53,10 @@ _start:
     ; Load the 64-bit GDT
     lgdt [gdt64.pointer]
 
+    ; Restore Multiboot2 EAX and EBX
+    pop eax
+    pop ebx
+
     ; Far jump to 64-bit code segment
     jmp gdt64.code_segment:long_mode_start
 

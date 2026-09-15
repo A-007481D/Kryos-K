@@ -9,13 +9,18 @@ long_mode_start:
     ; However, we are still executing from the low memory identity map.
     ; We must use a 64-bit absolute jump to reach the higher-half mapping.
     
-    mov rax, .higher_half
-    jmp rax
+    mov rcx, .higher_half
+    jmp rcx
 
 section .text
 bits 64
 .higher_half:
     ; We are now executing in the higher half!
+    
+    ; Zero-extend the 32-bit Multiboot2 values into RDI and RSI FIRST
+    ; because loading segment registers uses ax and will clobber eax!
+    mov edi, eax
+    mov esi, ebx
     
     ; Load data segment registers with the 64-bit data segment selector.
     mov ax, 0x10
@@ -24,10 +29,6 @@ bits 64
     mov fs, ax
     mov gs, ax
     mov ss, ax
-
-    ; Zero-extend the 32-bit Multiboot2 values into RDI and RSI.
-    mov edi, eax
-    mov esi, ebx
 
     ; Pass the physical address of pml4_table as the 3rd argument (RDX)
     mov edx, pml4_table

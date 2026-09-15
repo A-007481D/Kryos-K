@@ -72,9 +72,16 @@ isr_common:
     ; Pass pointer to exception_frame_t as first argument (RDI)
     mov rdi, rsp
     
+    ; Align stack to 16 bytes as required by System V ABI
+    mov rbp, rsp
+    and rsp, -16
+    
     ; Clear direction flag for C ABI
     cld
     call fault_handler
+    
+    ; Restore original stack pointer
+    mov rsp, rbp
 
     ; Pop general-purpose registers
     pop r15

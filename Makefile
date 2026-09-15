@@ -17,6 +17,8 @@ OBJS = \
     $(BUILD_DIR)/arch/x86_64/boot/long_mode_start.o \
     $(BUILD_DIR)/arch/x86_64/interrupts/isr.o \
     $(BUILD_DIR)/kernel/init/main.o \
+    $(BUILD_DIR)/kernel/init/multiboot.o \
+    $(BUILD_DIR)/kernel/memory/pmm.o \
     $(BUILD_DIR)/drivers/serial/serial.o \
     $(BUILD_DIR)/kernel/lib/stdio.o \
     $(BUILD_DIR)/kernel/lib/assert.o \
