@@ -94,6 +94,8 @@ static void test_panic(void) {
 }
 
 #include "../../include/pmm.h"
+#include "../memory/vmm.h"
+#include "../memory/virt.h"
 
 // Simple pseudo-random number generator for shuffling
 static uint32_t xorshift32(uint32_t *state) {
@@ -230,6 +232,136 @@ static void test_pmm_failures(void) {
     serial_puts("[PASS] pmm_failures\n");
 }
 
+static void test_vmm_001_basic(void) {
+    uint64_t phys_page = pmm_alloc_page();
+    KASSERT(phys_page != 0);
+    uint64_t test_virt = 0x0000700000000000ULL;
+    
+    bool mapped = vmm_map_page(test_virt, phys_page, VMM_FLAG_WRITABLE);
+    KASSERT(mapped == true);
+    
+    uint64_t out_phys;
+    KASSERT(vmm_get_phys(test_virt, &out_phys) == true);
+    KASSERT(out_phys == phys_page);
+    
+    volatile uint64_t* ptr = (volatile uint64_t*)test_virt;
+    *ptr = 0xCAFEBABE12345678ULL;
+    KASSERT(*ptr == 0xCAFEBABE12345678ULL);
+    
+    // We intentionally don't unmap here so VMM-002 can test unmap.
+    serial_puts("[PASS] vmm_001_basic\n");
+}
+
+static void test_vmm_002_fault(void) {
+    uint64_t test_virt = 0x0000700000000000ULL;
+    
+    bool unmapped = vmm_unmap_page(test_virt);
+    KASSERT(unmapped == true);
+    
+    current_test_context.expected_vector = 14; // #PF
+    current_test_context.expected_cr2 = test_virt;
+    current_test_context.active = true;
+    
+    SAVE_RECOVERY_STATE();
+    __asm__ volatile(
+        "mov %%rdx, (%%rax)\n"
+        "1:\n"
+        : 
+        : "a"(test_virt), "d"(0xDEADBEEFULL)
+        : "memory"
+    );
+    
+    current_test_context.active = false;
+    
+    // The physical frame from VMM-001 is now "leaked" to simulate caller ownership 
+    // without tracking it, which is fine for this test suite.
+    serial_puts("[PASS] vmm_002_fault\n");
+}
+
+static void test_vmm_003_huge_page(void) {
+    extern char _kernel_start[];
+    uint64_t kernel_virt = (uint64_t)_kernel_start;
+    
+    uint64_t out_phys;
+    KASSERT(vmm_get_phys(kernel_virt, &out_phys) == true);
+    KASSERT(out_phys == (kernel_virt - 0xFFFFFFFF80000000ULL));
+    
+    // Attempt to map inside the huge page, should be rejected
+    uint64_t new_phys = pmm_alloc_page();
+    KASSERT(vmm_map_page(kernel_virt, new_phys, VMM_FLAG_WRITABLE) == false);
+    
+    // Attempt to unmap inside the huge page, should be rejected
+    KASSERT(vmm_unmap_page(kernel_virt) == false);
+    
+    pmm_free_page(new_phys);
+    serial_puts("[PASS] vmm_003_huge_page\n");
+}
+
+static void test_vmm_004_alignment(void) {
+    uint64_t test_virt = 0x0000700000001000ULL;
+    uint64_t phys_page = pmm_alloc_page();
+    
+    KASSERT(vmm_map_page(test_virt + 1, phys_page, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_map_page(test_virt, phys_page + 1, VMM_FLAG_WRITABLE) == false);
+    
+    pmm_free_page(phys_page);
+    serial_puts("[PASS] vmm_004_alignment\n");
+}
+
+static void test_vmm_005_canonical(void) {
+    uint64_t non_canonical = 0x0000800000000000ULL; // Bit 47 is 1, bits 48-63 are 0
+    uint64_t phys_page = pmm_alloc_page();
+    
+    KASSERT(vmm_map_page(non_canonical, phys_page, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_unmap_page(non_canonical) == false);
+    KASSERT(vmm_get_phys(non_canonical, NULL) == false);
+    
+    pmm_free_page(phys_page);
+    serial_puts("[PASS] vmm_005_canonical\n");
+}
+
+static void test_vmm_006_double_map(void) {
+    uint64_t test_virt = 0x0000700000002000ULL;
+    uint64_t phys_page1 = pmm_alloc_page();
+    uint64_t phys_page2 = pmm_alloc_page();
+    
+    KASSERT(vmm_map_page(test_virt, phys_page1, VMM_FLAG_WRITABLE) == true);
+    
+    // Second map should fail
+    KASSERT(vmm_map_page(test_virt, phys_page2, VMM_FLAG_WRITABLE) == false);
+    
+    KASSERT(vmm_unmap_page(test_virt) == true);
+    
+    pmm_free_page(phys_page1);
+    pmm_free_page(phys_page2);
+    
+    serial_puts("[PASS] vmm_006_double_map\n");
+}
+
+static void test_vmm_007_008_accounting(void) {
+    uint64_t free_before = pmm_free_frames();
+    
+    uint64_t test_virt = 0x0000600000000000ULL;
+    uint64_t phys_page = pmm_alloc_page(); // Caller allocates the data frame
+    
+    KASSERT(pmm_free_frames() == free_before - 1);
+    
+    KASSERT(vmm_map_page(test_virt, phys_page, VMM_FLAG_WRITABLE) == true);
+    
+    uint64_t free_after_map = pmm_free_frames();
+    KASSERT(free_after_map == free_before - 1 - 3);
+    serial_puts("[PASS] vmm_007_pt_alloc\n");
+    
+    KASSERT(vmm_unmap_page(test_virt) == true);
+    
+    KASSERT(pmm_free_frames() == free_after_map);
+    
+    pmm_free_page(phys_page);
+    
+    KASSERT(pmm_free_frames() == free_after_map + 1);
+    serial_puts("[PASS] vmm_008_accounting\n");
+}
+
 void run_kernel_tests(void) {
     test_kassert();
     test_divide_by_zero();
@@ -240,6 +372,14 @@ void run_kernel_tests(void) {
     test_pmm_randomization();
     test_pmm_failures();
     test_pmm_exhaustion(); // Now tracked and freed safely
+    
+    test_vmm_001_basic();
+    test_vmm_002_fault();
+    test_vmm_003_huge_page();
+    test_vmm_004_alignment();
+    test_vmm_005_canonical();
+    test_vmm_006_double_map();
+    test_vmm_007_008_accounting();
     
     test_panic();
 }

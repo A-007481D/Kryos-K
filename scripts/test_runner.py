@@ -16,6 +16,14 @@ EXPECTED_PASSES = [
     "[PASS] pmm_randomization",
     "[PASS] pmm_failures",
     "[PASS] pmm_exhaustion_oom",
+    "[PASS] vmm_001_basic",
+    "[PASS] vmm_002_fault",
+    "[PASS] vmm_003_huge_page",
+    "[PASS] vmm_004_alignment",
+    "[PASS] vmm_005_canonical",
+    "[PASS] vmm_006_double_map",
+    "[PASS] vmm_007_pt_alloc",
+    "[PASS] vmm_008_accounting",
     "@@KRYOS:SUITE:PASS"
 ]
 
