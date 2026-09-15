@@ -11,8 +11,7 @@ EXPECTED_PASSES = [
     "[PASS] kassert",
     "[PASS] divide_by_zero",
     "[PASS] invalid_opcode",
-    "[PASS] page_fault",
-    "[PASS] all tests completed"
+    "[PASS] page_fault"
 ]
 
 def main():
@@ -52,7 +51,7 @@ def main():
     panic_detected = False
     unhandled_exception_detected = False
     tests_completed = False
-    expected_panic_seen = False
+    expecting_panic = False
     
     while True:
         if time.time() - start_time > timeout:
@@ -69,18 +68,20 @@ def main():
             print(f"| {line}")
             output.append(line)
             
+            if "@@KRYOS:SUITE:PASS" in line:
+                tests_completed = True
+                
+            if "@@KRYOS:TEST:panic:EXPECTED" in line:
+                expecting_panic = True
+            
             if "KERNEL PANIC" in line:
                 panic_detected = True
-                if tests_completed:
-                    expected_panic_seen = True
+                if tests_completed and expecting_panic:
                     process.kill() # Terminate VM early to speed up test execution
                     break
             
             if "UNHANDLED CPU EXCEPTION" in line:
                 unhandled_exception_detected = True
-                
-            if "[PASS] all tests completed" in line:
-                tests_completed = True
                 
     print("\n=== Test Results ===")
     
@@ -88,7 +89,7 @@ def main():
         print("[FAIL] UNEXPECTED EXCEPTION")
         sys.exit(1)
         
-    if panic_detected and not expected_panic_seen:
+    if panic_detected and not (tests_completed and expecting_panic):
         print("[FAIL] KERNEL PANIC (Unexpected)")
         sys.exit(1)
         
@@ -100,8 +101,8 @@ def main():
         print("[FAIL] QEMU RESET / TRIPLE FAULT or early exit")
         sys.exit(1)
         
-    if not expected_panic_seen:
-        print("[FAIL] TEST FAILURE: Expected kernel panic did not occur.")
+    if not (panic_detected and expecting_panic):
+        print("[FAIL] TEST FAILURE: Expected terminal panic did not occur.")
         sys.exit(1)
         
     print("[SUCCESS] All tests passed!")

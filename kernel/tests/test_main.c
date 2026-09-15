@@ -75,9 +75,9 @@ static void test_page_fault(void) {
 }
 
 static void test_panic(void) {
-    serial_puts("[PASS] all tests completed\n");
-    // Trigger expected panic. The Python runner will detect this specific panic
-    // after the completion message as proof that panics work.
+    serial_puts("@@KRYOS:SUITE:PASS\n");
+    serial_puts("@@KRYOS:TEST:panic:EXPECTED\n");
+    // Trigger expected panic.
     KASSERT(false);
 }
 
