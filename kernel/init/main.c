@@ -3,6 +3,8 @@
 #include "idt.h"
 #include "multiboot.h"
 #include "../memory/vmm.h"
+#include "../memory/layout.h"
+#include "../../include/heap.h"
 #include "tests.h"
 
 void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
@@ -11,6 +13,7 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     __asm__ volatile("mov %0, %%cr3" : : "r"(pml4_phys) : "memory");
     
     vmm_init(pml4_phys);
+    kheap_init(KERNEL_HEAP_BASE);
 
     serial_init();
     idt_init();

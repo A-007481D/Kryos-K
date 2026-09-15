@@ -24,6 +24,19 @@ EXPECTED_PASSES = [
     "[PASS] vmm_006_double_map",
     "[PASS] vmm_007_pt_alloc",
     "[PASS] vmm_008_accounting",
+    "[PASS] heap_001_minimal",
+    "[PASS] heap_002_alignment",
+    "[PASS] heap_003_boundaries",
+    "[PASS] heap_004_split",
+    "[PASS] heap_005_coalesce",
+    "[PASS] heap_006_double_free",
+    "[PASS] heap_007_invalid_ptr",
+    "[PASS] heap_008_unaligned_ptr",
+    "[PASS] heap_009_exhaustion",
+    "[PASS] heap_010_verify",
+    "[PASS] heap_011_corruption",
+    "[PASS] heap_012_randomized",
+    "[PASS] heap_013_accounting",
     "@@KRYOS:SUITE:PASS"
 ]
 

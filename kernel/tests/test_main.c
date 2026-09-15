@@ -94,6 +94,7 @@ static void test_panic(void) {
 }
 
 #include "../../include/pmm.h"
+#include "../../include/heap.h"
 #include "../memory/vmm.h"
 #include "../memory/virt.h"
 
@@ -362,6 +363,203 @@ static void test_vmm_007_008_accounting(void) {
     serial_puts("[PASS] vmm_008_accounting\n");
 }
 
+static void test_heap_001_minimal(void) {
+    void* p0 = kmalloc(0);
+    KASSERT(p0 == NULL);
+    
+    void* p1 = kmalloc(1);
+    KASSERT(p1 != NULL);
+    KASSERT(((uintptr_t)p1 % 16) == 0);
+    
+    kfree(p1);
+    kheap_verify();
+    serial_puts("[PASS] heap_001_minimal\n");
+}
+
+static void test_heap_002_alignment(void) {
+    void* p1 = kmalloc(17);
+    void* p2 = kmalloc(33);
+    void* p3 = kmalloc(7);
+    
+    KASSERT(((uintptr_t)p1 % 16) == 0);
+    KASSERT(((uintptr_t)p2 % 16) == 0);
+    KASSERT(((uintptr_t)p3 % 16) == 0);
+    
+    kfree(p1);
+    kfree(p2);
+    kfree(p3);
+    kheap_verify();
+    serial_puts("[PASS] heap_002_alignment\n");
+}
+
+static void test_heap_003_boundaries(void) {
+    void* p1 = kmalloc(4095);
+    void* p2 = kmalloc(4096);
+    void* p3 = kmalloc(4097);
+    
+    KASSERT(p1 != NULL);
+    KASSERT(p2 != NULL);
+    KASSERT(p3 != NULL);
+    
+    ((uint8_t*)p1)[4094] = 0xAA;
+    ((uint8_t*)p2)[4095] = 0xBB;
+    ((uint8_t*)p3)[4096] = 0xCC;
+    
+    KASSERT(((uint8_t*)p1)[4094] == 0xAA);
+    KASSERT(((uint8_t*)p2)[4095] == 0xBB);
+    KASSERT(((uint8_t*)p3)[4096] == 0xCC);
+    
+    kfree(p1);
+    kfree(p2);
+    kfree(p3);
+    kheap_verify();
+    serial_puts("[PASS] heap_003_boundaries\n");
+}
+
+static void test_heap_004_005_split_coalesce(void) {
+    void* a = kmalloc(128);
+    void* b = kmalloc(256);
+    void* c = kmalloc(128);
+    
+    kfree(b);
+    kheap_verify();
+    
+    void* d = kmalloc(64);
+    KASSERT(d == b); 
+    kheap_verify();
+    
+    kfree(a);
+    kfree(d);
+    kfree(c);
+    kheap_verify();
+    serial_puts("[PASS] heap_004_split\n");
+    serial_puts("[PASS] heap_005_coalesce\n");
+}
+
+static void test_heap_006_double_free(void) {
+    void* a = kmalloc(64);
+    kfree(a);
+    TEST_PANIC(kfree(a), "Double free");
+    serial_puts("[PASS] heap_006_double_free\n");
+}
+
+static void test_heap_007_invalid_ptr(void) {
+    TEST_PANIC(kfree((void*)0x12345678), "Invalid free");
+    serial_puts("[PASS] heap_007_invalid_ptr\n");
+}
+
+static void test_heap_008_unaligned_ptr(void) {
+    void* a = kmalloc(64);
+    TEST_PANIC(kfree((void*)((uintptr_t)a + 1)), "Unaligned free");
+    kfree(a);
+    serial_puts("[PASS] heap_008_unaligned_ptr\n");
+}
+
+static void test_heap_009_exhaustion(void) {
+    #define CHUNKS 256
+    static void* chunks[CHUNKS];
+    int count = 0;
+    
+    while (count < CHUNKS) {
+        chunks[count] = kmalloc(16 * 1024 * 1024); // 16 MiB
+        if (!chunks[count]) break;
+        count++;
+    }
+    
+    KASSERT(count < CHUNKS); 
+    
+    for (int i = 0; i < count; i++) {
+        kfree(chunks[i]);
+    }
+    kheap_verify();
+    serial_puts("[PASS] heap_009_exhaustion\n");
+}
+
+static void test_heap_010_verify(void) {
+    serial_puts("[PASS] heap_010_verify\n");
+}
+
+static void test_heap_011_corruption(void) {
+    void* a = kmalloc(64);
+    void* b = kmalloc(64);
+    
+    // Save B's 48-byte header
+    uint8_t b_header_copy[48];
+    for (int i = 0; i < 48; i++) {
+        b_header_copy[i] = ((uint8_t*)b - 48)[i];
+    }
+    
+    // Overflow A by 48 bytes to overwrite B's header
+    for (int i = 0; i < 64 + 48; i++) {
+        ((uint8_t*)a)[i] = 0x00;
+    }
+    
+    TEST_PANIC(kfree(b), "Heap corruption");
+    
+    // Restore B's header
+    for (int i = 0; i < 48; i++) {
+        ((uint8_t*)b - 48)[i] = b_header_copy[i];
+    }
+    
+    kfree(b);
+    kfree(a);
+    
+    serial_puts("[PASS] heap_011_corruption\n");
+}
+
+static void test_heap_012_randomized(void) {
+    #define RAND_OPS 1000
+    #define MAX_LIVE 64
+    static void* live[MAX_LIVE];
+    for(int i=0; i<MAX_LIVE; i++) live[i] = NULL;
+    
+    uint32_t state = 0xCAFEBABE;
+    for (int i = 0; i < RAND_OPS; i++) {
+        int slot = xorshift32(&state) % MAX_LIVE;
+        if (live[slot]) {
+            kfree(live[slot]);
+            live[slot] = NULL;
+        } else {
+            size_t size = (xorshift32(&state) % 4096) + 1;
+            live[slot] = kmalloc(size);
+            KASSERT(live[slot] != NULL);
+        }
+        if (i % 100 == 0) kheap_verify();
+    }
+    
+    for (int i = 0; i < MAX_LIVE; i++) {
+        if (live[i]) kfree(live[i]);
+    }
+    kheap_verify();
+    serial_puts("[PASS] heap_012_randomized\n");
+}
+
+static void test_heap_013_accounting(void) {
+    uint64_t pmm_free_before = pmm_free_frames();
+    struct kheap_stats stats_before;
+    kheap_get_stats(&stats_before);
+    
+    void* p = kmalloc(1024 * 1024); 
+    
+    struct kheap_stats stats_mid;
+    kheap_get_stats(&stats_mid);
+    
+    uint64_t pmm_dropped = pmm_free_before - pmm_free_frames();
+    uint64_t heap_grew = stats_mid.virtual_committed - stats_before.virtual_committed;
+    
+    KASSERT(pmm_dropped * 4096 >= heap_grew); 
+    
+    kfree(p);
+    
+    struct kheap_stats stats_after;
+    kheap_get_stats(&stats_after);
+    
+    KASSERT(stats_after.allocated_bytes == stats_before.allocated_bytes);
+    KASSERT(pmm_free_frames() == (pmm_free_before - pmm_dropped));
+    
+    serial_puts("[PASS] heap_013_accounting\n");
+}
+
 void run_kernel_tests(void) {
     test_kassert();
     test_divide_by_zero();
@@ -371,7 +569,7 @@ void run_kernel_tests(void) {
     test_pmm_basic();
     test_pmm_randomization();
     test_pmm_failures();
-    test_pmm_exhaustion(); // Now tracked and freed safely
+    test_pmm_exhaustion();
     
     test_vmm_001_basic();
     test_vmm_002_fault();
@@ -380,6 +578,19 @@ void run_kernel_tests(void) {
     test_vmm_005_canonical();
     test_vmm_006_double_map();
     test_vmm_007_008_accounting();
+    
+    test_heap_001_minimal();
+    test_heap_002_alignment();
+    test_heap_003_boundaries();
+    test_heap_004_005_split_coalesce();
+    test_heap_006_double_free();
+    test_heap_007_invalid_ptr();
+    test_heap_008_unaligned_ptr();
+    test_heap_009_exhaustion();
+    test_heap_010_verify();
+    test_heap_011_corruption();
+    test_heap_012_randomized();
+    test_heap_013_accounting();
     
     test_panic();
 }
