@@ -25,12 +25,19 @@ typedef struct {
 
 typedef struct {
     uint64_t recovery_rip;
+    uint64_t recovery_rsp;
+    uint64_t recovery_rbp;
+    uint64_t recovery_rbx;
+    uint64_t recovery_r12;
+    uint64_t recovery_r13;
+    uint64_t recovery_r14;
+    uint64_t recovery_r15;
     uint8_t  expected_vector;
     uint64_t expected_cr2; // Only used for Page Faults (#PF)
     bool     active;
 } exception_test_context_t;
 
-extern exception_test_context_t *current_test_context;
+extern volatile exception_test_context_t current_test_context;
 
 void fault_handler(exception_frame_t *frame);
 

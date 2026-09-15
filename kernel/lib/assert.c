@@ -1,5 +1,6 @@
 #include "assert.h"
-#include "stdio.h"
+#include <stdio.h>
+#include <interrupts.h>
 #include "serial.h"
 #include <stdarg.h>
 
@@ -14,9 +15,15 @@ void panic(const char *file, int line, const char *fmt, ...) {
     kvprintf(fmt, args);
     va_end(args);
     
-    serial_puts("\n===================================================\n");
+    if (current_test_context.active) {
+        // If we are in a test context that expects a panic, we will trigger a #UD
+        // to gracefully fall into the exception handler and recover.
+        serial_puts(" (Panic intercepted by test context)\n");
+        __asm__ volatile("ud2");
+    }
     
-    // Halt the CPU
+    serial_puts("===================================================\n");
+
     for (;;) {
         __asm__ volatile("cli; hlt");
     }

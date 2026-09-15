@@ -42,17 +42,26 @@ void kvprintf(const char *format, va_list args) {
         }
         
         p++;
+        int is_long = 0;
+        if (*p == 'l') {
+            is_long = 1;
+            p++;
+        }
+        
         if (!*p) break;
         
         switch (*p) {
             case 'd':
-                print_int(va_arg(args, int), 10);
+                if (is_long) print_int(va_arg(args, int64_t), 10);
+                else print_int(va_arg(args, int), 10);
                 break;
             case 'u':
-                print_uint(va_arg(args, unsigned int), 10, 0, ' ');
+                if (is_long) print_uint(va_arg(args, uint64_t), 10, 0, ' ');
+                else print_uint(va_arg(args, unsigned int), 10, 0, ' ');
                 break;
             case 'x':
-                print_uint(va_arg(args, unsigned int), 16, 0, ' ');
+                if (is_long) print_uint(va_arg(args, uint64_t), 16, 0, ' ');
+                else print_uint(va_arg(args, unsigned int), 16, 0, ' ');
                 break;
             case 'p':
                 serial_puts("0x");

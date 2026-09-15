@@ -3,7 +3,7 @@
 #include "stdio.h"
 #include <stddef.h>
 
-exception_test_context_t *current_test_context = NULL;
+volatile exception_test_context_t current_test_context = {0};
 
 static const char *exception_names[32] = {
     "Divide Error", "Debug", "NMI", "Breakpoint", "Overflow", "BOUND Range Exceeded",
@@ -22,26 +22,33 @@ void fault_handler(exception_frame_t *frame) {
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
     }
 
-    if (current_test_context && current_test_context->active) {
-        if (frame->vector != current_test_context->expected_vector) {
+    if (current_test_context.active) {
+        if (frame->vector != current_test_context.expected_vector) {
             panic(__FILE__, __LINE__, 
                 "Test failed: Expected exception %d, but got %d (%s)", 
-                current_test_context->expected_vector, 
+                current_test_context.expected_vector, 
                 frame->vector, 
                 frame->vector < 32 ? exception_names[frame->vector] : "Unknown");
         }
         
         if (frame->vector == 14) {
-            if (cr2 != current_test_context->expected_cr2) {
+            if (cr2 != current_test_context.expected_cr2) {
                 panic(__FILE__, __LINE__, 
                     "Test failed: Expected CR2 0x%p, but got 0x%p", 
-                    current_test_context->expected_cr2, cr2);
+                    current_test_context.expected_cr2, cr2);
             }
         }
         
         // Recover execution
-        frame->rip = current_test_context->recovery_rip;
-        current_test_context->active = false;
+        frame->rip = current_test_context.recovery_rip;
+        frame->rsp = current_test_context.recovery_rsp;
+        frame->rbp = current_test_context.recovery_rbp;
+        frame->rbx = current_test_context.recovery_rbx;
+        frame->r12 = current_test_context.recovery_r12;
+        frame->r13 = current_test_context.recovery_r13;
+        frame->r14 = current_test_context.recovery_r14;
+        frame->r15 = current_test_context.recovery_r15;
+        current_test_context.active = false;
         return;
     }
     
