@@ -21,6 +21,8 @@ OBJS = \
     $(BUILD_DIR)/kernel/memory/pmm.o \
     $(BUILD_DIR)/kernel/memory/vmm.o \
     $(BUILD_DIR)/kernel/memory/heap.o \
+    $(BUILD_DIR)/kernel/thread/thread.o \
+    $(BUILD_DIR)/arch/x86_64/thread/switch.o \
     $(BUILD_DIR)/drivers/serial/serial.o \
     $(BUILD_DIR)/kernel/lib/stdio.o \
     $(BUILD_DIR)/kernel/lib/assert.o \
@@ -39,6 +41,10 @@ $(BUILD_DIR)/%.o: %.c
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(dir $@)
 	$(ASM) $(ASMFLAGS) $< -o $@
+
+$(BUILD_DIR)/%.o: %.S
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_ELF): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@

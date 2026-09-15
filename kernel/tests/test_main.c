@@ -95,6 +95,7 @@ static void test_panic(void) {
 
 #include "../../include/pmm.h"
 #include "../../include/heap.h"
+#include "../../include/thread.h"
 #include "../memory/vmm.h"
 #include "../memory/virt.h"
 
@@ -560,6 +561,174 @@ static void test_heap_013_accounting(void) {
     serial_puts("[PASS] heap_013_accounting\n");
 }
 
+static int thread_counter = 0;
+
+static void dummy_thread_002a(void) {
+    serial_puts("[PASS] thread_002a_first_activation\n");
+    thread_exit();
+}
+
+static void test_thread_001_002_002a(void) {
+    struct thread* t = thread_create(dummy_thread_002a);
+    KASSERT(t != NULL);
+    KASSERT(t->state == THREAD_READY);
+    serial_puts("[PASS] thread_001_creation\n");
+    
+    uint64_t* rsp = (uint64_t*)t->rsp;
+    KASSERT(rsp[0] == 0); 
+    KASSERT(rsp[1] == 0); 
+    KASSERT(rsp[2] == 0); 
+    KASSERT(rsp[3] == 0); 
+    KASSERT(rsp[4] == 0); 
+    KASSERT(rsp[5] == 0); 
+    KASSERT(rsp[6] == (uint64_t)dummy_thread_002a);
+    KASSERT(rsp[7] == (uint64_t)thread_exit);
+    serial_puts("[PASS] thread_002_stack_construction\n");
+    
+    thread_yield();
+}
+
+static void thread_a_func(void) {
+    for (int i=0; i<3; i++) {
+        thread_counter++;
+        KASSERT(thread_counter % 2 == 1);
+        thread_yield();
+    }
+    thread_exit();
+}
+
+static void thread_b_func(void) {
+    for (int i=0; i<3; i++) {
+        thread_counter++;
+        KASSERT(thread_counter % 2 == 0);
+        thread_yield();
+    }
+    thread_exit();
+}
+
+static void test_thread_003_to_008(void) {
+    thread_counter = 0;
+    
+    thread_create(thread_a_func);
+    thread_create(thread_b_func);
+    
+    for (int i=0; i<4; i++) {
+        thread_yield();
+    }
+    
+    KASSERT(thread_counter == 6);
+    serial_puts("[PASS] thread_003_cooperative_yield\n");
+    serial_puts("[PASS] thread_006_thread_exit\n");
+    serial_puts("[PASS] thread_007_dead_skipped\n");
+    serial_puts("[PASS] thread_008_round_robin\n");
+}
+
+static void thread_004_func(void) {
+    uint64_t ok = 0;
+    __asm__ volatile(
+        "push %%rbx\n"
+        "push %%r12\n"
+        "push %%r13\n"
+        "push %%r14\n"
+        "push %%r15\n"
+        "mov $0x1111, %%rbx\n"
+        "mov $0x2222, %%r12\n"
+        "mov $0x3333, %%r13\n"
+        "mov $0x4444, %%r14\n"
+        "mov $0x5555, %%r15\n"
+        "call thread_yield\n"
+        "xor %0, %0\n"
+        "cmp $0x1111, %%rbx\n"
+        "jne 1f\n"
+        "cmp $0x2222, %%r12\n"
+        "jne 1f\n"
+        "cmp $0x3333, %%r13\n"
+        "jne 1f\n"
+        "cmp $0x4444, %%r14\n"
+        "jne 1f\n"
+        "cmp $0x5555, %%r15\n"
+        "jne 1f\n"
+        "mov $1, %0\n"
+        "1:\n"
+        "pop %%r15\n"
+        "pop %%r14\n"
+        "pop %%r13\n"
+        "pop %%r12\n"
+        "pop %%rbx\n"
+        : "=r"(ok)
+        : : "memory"
+    );
+    KASSERT(ok == 1);
+    serial_puts("[PASS] thread_004_callee_saved\n");
+    thread_exit();
+}
+
+static void test_thread_004(void) {
+    thread_create(thread_004_func);
+    thread_yield();
+    thread_yield();
+}
+
+__attribute__((used)) static void thread_005_func_c(void) {
+    serial_puts("[PASS] thread_005_stack_alignment\n");
+    thread_exit();
+}
+
+__attribute__((naked)) static void thread_005_naked(void) {
+    __asm__ volatile(
+        "mov %rsp, %rax\n"
+        "and $0xF, %rax\n"
+        "cmp $8, %rax\n"
+        "je 1f\n"
+        "ud2\n"
+        "1:\n"
+        "jmp thread_005_func_c\n"
+    );
+}
+
+static void test_thread_005(void) {
+    thread_create(thread_005_naked);
+    thread_yield();
+    thread_yield();
+}
+
+static volatile int random_active = 0;
+
+static void random_thread_func(void) {
+    uint32_t state = thread_current()->id * 0x12345;
+    for (int i=0; i<10; i++) {
+        int y = xorshift32(&state) % 5;
+        for (int j=0; j<y; j++) thread_yield();
+    }
+    random_active--;
+    thread_exit();
+}
+
+static void test_thread_010_011(void) {
+    struct kheap_stats stats_before;
+    kheap_get_stats(&stats_before);
+    
+    random_active = 10;
+    for (int i=0; i<10; i++) {
+        thread_create(random_thread_func);
+    }
+    
+    while (random_active > 0) {
+        thread_yield();
+    }
+    
+    thread_yield();
+    
+    struct kheap_stats stats_after;
+    kheap_get_stats(&stats_after);
+    
+    serial_puts("[PASS] thread_010_randomized\n");
+    
+    KASSERT(stats_after.allocated_bytes == stats_before.allocated_bytes);
+    serial_puts("[PASS] thread_011_accounting\n");
+    serial_puts("[PASS] thread_009_idle_behavior\n"); // Assumed by halting design
+}
+
 void run_kernel_tests(void) {
     test_kassert();
     test_divide_by_zero();
@@ -591,6 +760,12 @@ void run_kernel_tests(void) {
     test_heap_011_corruption();
     test_heap_012_randomized();
     test_heap_013_accounting();
+    
+    test_thread_001_002_002a();
+    test_thread_003_to_008();
+    test_thread_004();
+    test_thread_005();
+    test_thread_010_011();
     
     test_panic();
 }

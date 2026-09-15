@@ -37,6 +37,18 @@ EXPECTED_PASSES = [
     "[PASS] heap_011_corruption",
     "[PASS] heap_012_randomized",
     "[PASS] heap_013_accounting",
+    "[PASS] thread_001_creation",
+    "[PASS] thread_002_stack_construction",
+    "[PASS] thread_002a_first_activation",
+    "[PASS] thread_003_cooperative_yield",
+    "[PASS] thread_006_thread_exit",
+    "[PASS] thread_007_dead_skipped",
+    "[PASS] thread_008_round_robin",
+    "[PASS] thread_004_callee_saved",
+    "[PASS] thread_005_stack_alignment",
+    "[PASS] thread_010_randomized",
+    "[PASS] thread_011_accounting",
+    "[PASS] thread_009_idle_behavior",
     "@@KRYOS:SUITE:PASS"
 ]
 
