@@ -11,7 +11,12 @@ EXPECTED_PASSES = [
     "[PASS] kassert",
     "[PASS] divide_by_zero",
     "[PASS] invalid_opcode",
-    "[PASS] page_fault"
+    "[PASS] page_fault",
+    "[PASS] pmm_basic",
+    "[PASS] pmm_randomization",
+    "[PASS] pmm_failures",
+    "[PASS] pmm_exhaustion_oom",
+    "@@KRYOS:SUITE:PASS"
 ]
 
 def main():
