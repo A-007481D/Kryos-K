@@ -2,6 +2,7 @@
 #include "../../include/pmm.h"
 #include "../lib/irq.h"
 #include "vmm.h"
+#include "../../include/process.h"
 #include "layout.h"
 #include <assert.h>
 #include <stdint.h>
@@ -54,7 +55,7 @@ static bool expand_heap(size_t bytes) {
             return false; // Physical OOM
         }
         
-        bool mapped = vmm_map_page(heap_committed_end, phys, VMM_FLAG_WRITABLE);
+        bool mapped = vmm_map_page(&kernel_process->as, heap_committed_end, phys, VMM_FLAG_WRITABLE);
         if (!mapped) {
             pmm_free_page(phys);
             return false;

@@ -25,9 +25,9 @@ static void map_user_region(void) {
     uint64_t p_data = pmm_alloc_page();
     uint64_t p_stack = pmm_alloc_page();
     
-    bool r1 = vmm_map_page(0x80000000, p_code, flags);
-    bool r2 = vmm_map_page(0x80100000, p_data, flags);
-    bool r3 = vmm_map_page(0x801FF000, p_stack, flags);
+    bool r1 = vmm_map_page(&kernel_process->as, 0x80000000, p_code, flags);
+    bool r2 = vmm_map_page(&kernel_process->as, 0x80100000, p_data, flags);
+    bool r3 = vmm_map_page(&kernel_process->as, 0x801FF000, p_stack, flags);
     
     KASSERT(r1 == true);
     KASSERT(r2 == true);
