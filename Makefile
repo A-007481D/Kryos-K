@@ -22,10 +22,13 @@ OBJS = \
     $(BUILD_DIR)/kernel/memory/vmm.o \
     $(BUILD_DIR)/kernel/memory/heap.o \
     $(BUILD_DIR)/kernel/thread/thread.o \
+    $(BUILD_DIR)/kernel/tests/test_user.o \
+    $(BUILD_DIR)/kernel/thread/usermode.o \
     $(BUILD_DIR)/arch/x86_64/thread/switch.o \
     $(BUILD_DIR)/drivers/serial/serial.o \
     $(BUILD_DIR)/kernel/lib/stdio.o \
     $(BUILD_DIR)/kernel/lib/assert.o \
+    $(BUILD_DIR)/kernel/interrupts/gdt.o \
     $(BUILD_DIR)/kernel/interrupts/idt.o \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/interrupts/pic.o \
