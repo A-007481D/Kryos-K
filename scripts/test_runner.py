@@ -49,6 +49,18 @@ EXPECTED_PASSES = [
     "[PASS] thread_010_randomized",
     "[PASS] thread_011_accounting",
     "[PASS] thread_009_idle_behavior",
+    "[PASS] preempt_001_pit_init",
+    "[PASS] preempt_002_irq0_delivery",
+    "[PASS] preempt_003_pic_ack",
+    "[PASS] preempt_007_critical_section",
+    "[PASS] preempt_004_switching",
+    "[PASS] preempt_005_register_preservation",
+    "[PASS] preempt_006_rip_rflags_preservation",
+    "[PASS] preempt_008_resumption",
+    "[PASS] preempt_009_voluntary_preemptive_mix",
+    "[PASS] preempt_010_dead_thread_reap",
+    "[PASS] preempt_011_scheduler_accounting",
+    "[PASS] preempt_012_cross_subsystem_stress",
     "@@KRYOS:SUITE:PASS"
 ]
 

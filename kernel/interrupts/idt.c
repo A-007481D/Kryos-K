@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "pic.h"
 
 static idt_entry_t idt[256];
 static idtr_t idtr;
@@ -33,7 +34,7 @@ void idt_init(void) {
     idtr.base = (uint64_t)&idt;
     idtr.limit = sizeof(idt) - 1;
 
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 48; i++) {
         // 0x08 is the 64-bit code segment from our GDT
         // 0x8E = Present (1) | DPL (00) | Storage (0) | Gate Type (1110)
         idt_set_gate(i, isr_stub_table[i], 0x08, 0x8E);
@@ -41,4 +42,7 @@ void idt_init(void) {
 
     // Load IDT
     __asm__ volatile ("lidt %0" : : "m"(idtr));
+    
+    // Remap PIC to 32-47
+    pic_init();
 }

@@ -28,6 +28,8 @@ OBJS = \
     $(BUILD_DIR)/kernel/lib/assert.o \
     $(BUILD_DIR)/kernel/interrupts/idt.o \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
+    $(BUILD_DIR)/kernel/interrupts/pic.o \
+    $(BUILD_DIR)/kernel/interrupts/pit.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
 .PHONY: all clean iso run debug test

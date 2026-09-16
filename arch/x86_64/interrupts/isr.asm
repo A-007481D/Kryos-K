@@ -50,6 +50,22 @@ ISR_NOERR 28  ; Hypervisor Injection Exception
 ISR_ERR   29  ; VMM Communication Exception
 ISR_ERR   30  ; Security Exception
 ISR_NOERR 31  ; Reserved
+ISR_NOERR 32  ; IRQ0 (Timer)
+ISR_NOERR 33  ; IRQ1 (Keyboard)
+ISR_NOERR 34  ; IRQ2
+ISR_NOERR 35  ; IRQ3
+ISR_NOERR 36  ; IRQ4
+ISR_NOERR 37  ; IRQ5
+ISR_NOERR 38  ; IRQ6
+ISR_NOERR 39  ; IRQ7
+ISR_NOERR 40  ; IRQ8
+ISR_NOERR 41  ; IRQ9
+ISR_NOERR 42  ; IRQ10
+ISR_NOERR 43  ; IRQ11
+ISR_NOERR 44  ; IRQ12
+ISR_NOERR 45  ; IRQ13
+ISR_NOERR 46  ; IRQ14
+ISR_NOERR 47  ; IRQ15
 
 isr_common:
     ; Push general-purpose registers
@@ -140,3 +156,19 @@ isr_stub_table:
     dq isr_stub_29
     dq isr_stub_30
     dq isr_stub_31
+    dq isr_stub_32
+    dq isr_stub_33
+    dq isr_stub_34
+    dq isr_stub_35
+    dq isr_stub_36
+    dq isr_stub_37
+    dq isr_stub_38
+    dq isr_stub_39
+    dq isr_stub_40
+    dq isr_stub_41
+    dq isr_stub_42
+    dq isr_stub_43
+    dq isr_stub_44
+    dq isr_stub_45
+    dq isr_stub_46
+    dq isr_stub_47

@@ -7,6 +7,7 @@ typedef enum {
     THREAD_NEW,
     THREAD_READY,
     THREAD_RUNNING,
+    THREAD_BLOCKED,
     THREAD_DEAD
 } thread_state_t;
 
@@ -35,3 +36,8 @@ void thread_exit(void);
 
 // Gets the currently running thread
 struct thread* thread_current(void);
+
+// Timer IRQ handler
+void timer_handler(void);
+
+extern volatile uint64_t scheduler_ticks;

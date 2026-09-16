@@ -1,7 +1,9 @@
 #include <stdint.h>
 #include "serial.h"
 #include "idt.h"
+#include "idt.h"
 #include "multiboot.h"
+#include "../interrupts/pit.h"
 #include "../memory/vmm.h"
 #include "../memory/layout.h"
 #include "../../include/heap.h"
@@ -20,6 +22,7 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     thread_init();
 
     idt_init();
+    pit_init();
 
     serial_puts("[PASS] boot\n");
     serial_puts("[PASS] long_mode\n");

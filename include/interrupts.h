@@ -2,6 +2,8 @@
 #define KRYOS_INTERRUPTS_H
 
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 // Normalized exception frame.
 // The ISR assembly stubs push the error code (or a dummy 0) and the interrupt vector,
@@ -12,16 +14,19 @@ typedef struct {
     uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
     
     // Pushed by specific ISR stub
-    uint64_t vector;
-    uint64_t error_code;
+    uint64_t int_no;
+    uint64_t err_code;
     
-    // Pushed by the CPU on exception
+    // Pushed by the CPU
     uint64_t rip;
     uint64_t cs;
     uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-} __attribute__((packed)) exception_frame_t;
+} __attribute__((packed)) kernel_interrupt_frame;
+
+_Static_assert(offsetof(kernel_interrupt_frame, int_no) == 15 * 8, "int_no offset is wrong");
+_Static_assert(offsetof(kernel_interrupt_frame, err_code) == 16 * 8, "err_code offset is wrong");
+_Static_assert(offsetof(kernel_interrupt_frame, rip) == 17 * 8, "rip offset is wrong");
+_Static_assert(sizeof(kernel_interrupt_frame) == 20 * 8, "kernel_interrupt_frame size is wrong");
 
 typedef struct {
     uint64_t recovery_rip;
@@ -39,6 +44,6 @@ typedef struct {
 
 extern volatile exception_test_context_t current_test_context;
 
-void fault_handler(exception_frame_t *frame);
+void fault_handler(kernel_interrupt_frame *frame);
 
 #endif

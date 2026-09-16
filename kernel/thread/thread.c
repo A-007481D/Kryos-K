@@ -1,5 +1,7 @@
 #include "../../include/thread.h"
 #include "../../include/heap.h"
+#include "../lib/irq.h"
+#include "../interrupts/pic.h"
 #include <assert.h>
 #include <serial.h>
 #include <stddef.h>
@@ -10,6 +12,8 @@ extern void context_switch(struct thread* old_thread, struct thread* new_thread)
 static struct thread* current = NULL;
 static struct thread* head = NULL;
 static uint64_t next_tid = 1;
+volatile uint64_t scheduler_ticks = 0;
+static bool in_scheduler = false;
 
 #define STACK_SIZE 16384 // 16 KiB
 
@@ -32,6 +36,15 @@ struct thread* thread_current(void) {
     return current;
 }
 
+static void __attribute__((naked)) thread_start_wrapper(void) {
+    __asm__ volatile(
+        "sti\n"
+        "call *%%r12\n"
+        "call thread_exit\n"
+        : : : "memory"
+    );
+}
+
 struct thread* thread_create(void (*entry_point)(void)) {
     struct thread* t = kmalloc(sizeof(struct thread));
     KASSERT(t != NULL);
@@ -47,25 +60,29 @@ struct thread* thread_create(void (*entry_point)(void)) {
     top &= ~0xFULL;
     stack_top = (uint64_t*)top;
     
+    *(--stack_top) = 0; // Alignment pad (maintains 16-byte alignment for SysV ABI)
     *(--stack_top) = (uint64_t)thread_exit; // Fake return address
-    *(--stack_top) = (uint64_t)entry_point; // Entry point (popped by ret)
+    *(--stack_top) = (uint64_t)thread_start_wrapper; // Entry point (popped by ret)
     
-    *(--stack_top) = 0; // r15
-    *(--stack_top) = 0; // r14
-    *(--stack_top) = 0; // r13
-    *(--stack_top) = 0; // r12
-    *(--stack_top) = 0; // rbx
+    // Pushed in same order as context_switch (rbp first, r15 last)
     *(--stack_top) = 0; // rbp
+    *(--stack_top) = 0; // rbx
+    *(--stack_top) = (uint64_t)entry_point; // r12
+    *(--stack_top) = 0; // r13
+    *(--stack_top) = 0; // r14
+    *(--stack_top) = 0; // r15
     
     t->rsp = (uint64_t)stack_top;
     t->state = THREAD_READY;
     
+    irq_state_t flags = irq_save();
     struct thread* tail = head;
     while (tail->next != head) {
         tail = tail->next;
     }
     tail->next = t;
     t->next = head;
+    irq_restore(flags);
     
     return t;
 }
@@ -110,12 +127,10 @@ static void reap_dead_threads(void) {
     }
 }
 
-void thread_yield(void) {
-    KASSERT(current != NULL);
-    
-    // Cooperative scheduling is performed without asynchronous entry
-    __asm__ volatile("cli");
-    
+static void schedule(void) {
+    if (in_scheduler) return;
+    in_scheduler = true;
+
     reap_dead_threads();
     
     if (current->state == THREAD_RUNNING) {
@@ -127,7 +142,13 @@ void thread_yield(void) {
         if (next == current) {
             if (current->state == THREAD_READY) {
                 current->state = THREAD_RUNNING;
+                in_scheduler = false;
                 return;
+            } else {
+                serial_puts("No READY threads left. Halting.\n");
+                while(1) {
+                    __asm__ volatile("cli; hlt");
+                }
             }
         }
         next = next->next;
@@ -137,9 +158,25 @@ void thread_yield(void) {
     current = next;
     current->state = THREAD_RUNNING;
     
+    in_scheduler = false;
+    
     if (old != current) {
         context_switch(old, current);
     }
+}
+
+void timer_handler(void) {
+    scheduler_ticks++;
+    pic_eoi(0);
+    
+    schedule();
+}
+
+void thread_yield(void) {
+    KASSERT(current != NULL);
+    irq_state_t flags = irq_save();
+    schedule();
+    irq_restore(flags);
 }
 
 void thread_exit(void) {
@@ -148,23 +185,7 @@ void thread_exit(void) {
     __asm__ volatile("cli");
     
     current->state = THREAD_DEAD;
-    
-    struct thread* next = current->next;
-    while (next->state != THREAD_READY) {
-        if (next == current) {
-            serial_puts("No READY threads left. Halting.\n");
-            while(1) {
-                __asm__ volatile("hlt");
-            }
-        }
-        next = next->next;
-    }
-    
-    struct thread* old = current;
-    current = next;
-    current->state = THREAD_RUNNING;
-    
-    context_switch(old, current);
+    schedule();
     
     KASSERT(false && "thread_exit returned!");
     while(1);

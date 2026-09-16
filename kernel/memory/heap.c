@@ -1,5 +1,6 @@
 #include "../../include/heap.h"
 #include "../../include/pmm.h"
+#include "../lib/irq.h"
 #include "vmm.h"
 #include "layout.h"
 #include <assert.h>
@@ -67,6 +68,8 @@ static bool expand_heap(size_t bytes) {
 void* kmalloc(size_t size) {
     if (size == 0) return NULL;
     
+    irq_state_t flags = irq_save();
+
     size_t aligned_size = align_up(size, 16);
     size_t block_extent = sizeof(struct heap_block) + aligned_size;
     
@@ -92,6 +95,7 @@ void* kmalloc(size_t size) {
                     curr->size = aligned_size;
                 }
                 curr->state = HEAP_USED;
+                irq_restore(flags);
                 return (void*)((uint8_t*)curr + sizeof(struct heap_block));
             }
             tail = curr;
@@ -117,12 +121,17 @@ void* kmalloc(size_t size) {
             }
         }
         
-        if (!expanded) return NULL;
+        if (!expanded) {
+            irq_restore(flags);
+            return NULL;
+        }
     }
 }
 
 void kfree(void* ptr) {
     if (!ptr) return;
+    
+    irq_state_t flags = irq_save();
     
     uintptr_t addr = (uintptr_t)ptr;
     KASSERT(addr >= heap_start + sizeof(struct heap_block) && addr < heap_committed_end);
@@ -149,6 +158,8 @@ void kfree(void* ptr) {
         prev->next = block->next;
         if (prev->next) prev->next->prev = prev;
     }
+    
+    irq_restore(flags);
 }
 
 void kheap_verify(void) {

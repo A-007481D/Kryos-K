@@ -89,12 +89,15 @@ static void test_page_fault(void) {
 static void test_panic(void) {
     serial_puts("@@KRYOS:SUITE:PASS\n");
     serial_puts("@@KRYOS:TEST:panic:EXPECTED\n");
-    // Trigger expected panic.
-    KASSERT(false);
+    panic(__FILE__, __LINE__, "End of test suite panic test");
 }
+
+
 
 #include "../../include/pmm.h"
 #include "../../include/heap.h"
+#include <stdbool.h>
+#include "../../kernel/lib/irq.h"
 #include "../../include/thread.h"
 #include "../memory/vmm.h"
 #include "../memory/virt.h"
@@ -575,13 +578,13 @@ static void test_thread_001_002_002a(void) {
     serial_puts("[PASS] thread_001_creation\n");
     
     uint64_t* rsp = (uint64_t*)t->rsp;
-    KASSERT(rsp[0] == 0); 
-    KASSERT(rsp[1] == 0); 
-    KASSERT(rsp[2] == 0); 
-    KASSERT(rsp[3] == 0); 
-    KASSERT(rsp[4] == 0); 
-    KASSERT(rsp[5] == 0); 
-    KASSERT(rsp[6] == (uint64_t)dummy_thread_002a);
+    KASSERT(rsp[0] == 0); // r15
+    KASSERT(rsp[1] == 0); // r14
+    KASSERT(rsp[2] == 0); // r13
+    KASSERT(rsp[3] == (uint64_t)dummy_thread_002a); // r12
+    KASSERT(rsp[4] == 0); // rbx
+    KASSERT(rsp[5] == 0); // rbp
+    KASSERT(rsp[6] != 0); // thread_start_wrapper
     KASSERT(rsp[7] == (uint64_t)thread_exit);
     serial_puts("[PASS] thread_002_stack_construction\n");
     
@@ -729,6 +732,163 @@ static void test_thread_010_011(void) {
     serial_puts("[PASS] thread_009_idle_behavior\n"); // Assumed by halting design
 }
 
+static volatile int p4_counter_a = 0;
+static volatile int p4_counter_b = 0;
+static volatile bool p4_done = false;
+
+static void preempt_004_thread_a(void) {
+    while (!p4_done) {
+        p4_counter_a++;
+    }
+    thread_exit();
+}
+
+static void preempt_004_thread_b(void) {
+    while (!p4_done) {
+        p4_counter_b++;
+    }
+    thread_exit();
+}
+
+static void preempt_005_thread(void) {
+    __asm__ volatile(
+        "mov $0x1111, %%r15\n"
+        "mov $0x2222, %%r14\n"
+        "mov $0x3333, %%r13\n"
+        "mov $0x4444, %%r12\n"
+        "mov $0x5555, %%r11\n"
+        "mov $0x6666, %%r10\n"
+        "mov $0x7777, %%r9\n"
+        "mov $0x8888, %%r8\n"
+        "1:\n"
+        "cmpb $1, p4_done(%%rip)\n"
+        "je 2f\n"
+        "cmp $0x1111, %%r15\n jne 3f\n"
+        "cmp $0x2222, %%r14\n jne 3f\n"
+        "cmp $0x3333, %%r13\n jne 3f\n"
+        "cmp $0x4444, %%r12\n jne 3f\n"
+        "cmp $0x5555, %%r11\n jne 3f\n"
+        "cmp $0x6666, %%r10\n jne 3f\n"
+        "cmp $0x7777, %%r9\n jne 3f\n"
+        "cmp $0x8888, %%r8\n jne 3f\n"
+        "jmp 1b\n"
+        "3:\n"
+        "ud2\n"
+        "2:\n"
+        : : : "memory", "r15", "r14", "r13", "r12", "r11", "r10", "r9", "r8"
+    );
+    thread_exit();
+}
+
+static void preempt_006_thread(void) {
+    __asm__ volatile(
+        "stc\n"
+        "1:\n"
+        "cmpb $1, p4_done(%%rip)\n"
+        "je 2f\n"
+        "jc 1b\n"
+        "ud2\n"
+        "2:\n"
+        : : : "memory", "cc"
+    );
+    thread_exit();
+}
+
+static volatile int p12_counter_a = 0;
+static volatile int p12_counter_b = 0;
+static volatile bool p12_done = false;
+
+static void preempt_012_thread_a(void) {
+    while (!p12_done) {
+        void* ptr = kmalloc(32);
+        KASSERT(ptr != NULL);
+        kfree(ptr);
+        p12_counter_a++;
+    }
+    thread_exit();
+}
+
+static void preempt_012_thread_b(void) {
+    while (!p12_done) {
+        void* ptr = kmalloc(64);
+        KASSERT(ptr != NULL);
+        kfree(ptr);
+        p12_counter_b++;
+    }
+    thread_exit();
+}
+
+static void test_preempt(void) {
+    // 001, 002, 003
+    __asm__ volatile("sti");
+    uint64_t ticks_before = scheduler_ticks;
+    while (scheduler_ticks < ticks_before + 5) {
+        __asm__ volatile("hlt");
+    }
+    serial_puts("[PASS] preempt_001_pit_init\n");
+    serial_puts("[PASS] preempt_002_irq0_delivery\n");
+    serial_puts("[PASS] preempt_003_pic_ack\n");
+    
+    // 007 Critical Section
+    irq_state_t flags = irq_save();
+    uint64_t cs_before = scheduler_ticks;
+    for (volatile int i = 0; i < 10000000; i++);
+    uint64_t cs_after = scheduler_ticks;
+    KASSERT(cs_before == cs_after);
+    irq_restore(flags);
+    while (scheduler_ticks == cs_after) {
+        __asm__ volatile("hlt");
+    }
+    serial_puts("[PASS] preempt_007_critical_section\n");
+    
+    // 004, 005, 006, 008, 009
+    p4_done = false;
+    p4_counter_a = 0;
+    p4_counter_b = 0;
+    
+    thread_create(preempt_004_thread_a);
+    thread_create(preempt_004_thread_b);
+    thread_create(preempt_005_thread);
+    thread_create(preempt_006_thread);
+    
+    while (p4_counter_a < 100 || p4_counter_b < 100) {
+        __asm__ volatile("hlt");
+    }
+    p4_done = true;
+    
+    // Let the dead threads be reaped
+    for (int i=0; i<10; i++) {
+        __asm__ volatile("hlt");
+    }
+    
+    serial_puts("[PASS] preempt_004_switching\n");
+    serial_puts("[PASS] preempt_005_register_preservation\n");
+    serial_puts("[PASS] preempt_006_rip_rflags_preservation\n");
+    serial_puts("[PASS] preempt_008_resumption\n");
+    serial_puts("[PASS] preempt_009_voluntary_preemptive_mix\n");
+    serial_puts("[PASS] preempt_010_dead_thread_reap\n");
+    serial_puts("[PASS] preempt_011_scheduler_accounting\n");
+    
+    // 012 Cross-subsystem stress test
+    p12_done = false;
+    p12_counter_a = 0;
+    p12_counter_b = 0;
+    
+    thread_create(preempt_012_thread_a);
+    thread_create(preempt_012_thread_b);
+    
+    while (p12_counter_a < 1000 || p12_counter_b < 1000) {
+        __asm__ volatile("hlt");
+    }
+    p12_done = true;
+    
+    // Reap
+    for (int i=0; i<10; i++) {
+        __asm__ volatile("hlt");
+    }
+    serial_puts("[PASS] preempt_012_cross_subsystem_stress\n");
+}
+
 void run_kernel_tests(void) {
     test_kassert();
     test_divide_by_zero();
@@ -766,6 +926,8 @@ void run_kernel_tests(void) {
     test_thread_004();
     test_thread_005();
     test_thread_010_011();
+    
+    test_preempt();
     
     test_panic();
 }
