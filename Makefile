@@ -37,17 +37,24 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/interrupts/pic.o \
     $(BUILD_DIR)/kernel/interrupts/pit.o \
+    $(BUILD_DIR)/kernel/fs/vfs.o \
+    $(BUILD_DIR)/kernel/fs/tarfs.o \
+    $(BUILD_DIR)/kernel/fs/console.o \
     $(BUILD_DIR)/kernel/syscall/syscall.o \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
     $(BUILD_DIR)/kernel/tests/test_syscall.o \
+    $(BUILD_DIR)/kernel/tests/test_tarfs.o \
+    $(BUILD_DIR)/kernel/tests/test_vfs.o \
+    $(BUILD_DIR)/kernel/tests/test_syscall_fs.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
 .PHONY: all clean iso run debug test
 
 USER_INIT = $(BUILD_DIR)/user/init.elf
+INITRD = $(BUILD_DIR)/initrd.tar
 
-all: $(KERNEL_ELF) $(USER_INIT)
+all: $(KERNEL_ELF) $(USER_INIT) $(INITRD)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -68,13 +75,16 @@ $(USER_INIT): user/init.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -Wl,-Ttext=0x400000 $< -o $@
 
+$(INITRD): $(USER_INIT)
+	tar -cf $@ -C $(BUILD_DIR)/user init.elf
+
 iso: $(KERNEL_ISO)
 
-$(KERNEL_ISO): $(KERNEL_ELF) $(USER_INIT) boot/grub/grub.cfg
+$(KERNEL_ISO): $(KERNEL_ELF) $(INITRD) boot/grub/grub.cfg
 	@mkdir -p $(ISO_DIR)/boot/grub
 	@mkdir -p $(ISO_DIR)/boot/modules
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/kryos.elf
-	cp $(USER_INIT) $(ISO_DIR)/boot/modules/init.elf
+	cp $(INITRD) $(ISO_DIR)/boot/modules/initrd.tar
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	grub-mkrescue -o $(KERNEL_ISO) $(ISO_DIR)
 
