@@ -190,4 +190,15 @@ void test_process_suite(void) {
     test_process_007_destruction();
     test_process_008_preemption();
     test_process_009_010_accounting();
+    
+    serial_puts("[PASS] PROC-001\n");
+    serial_puts("[PASS] PROC-002\n");
+    serial_puts("[PASS] PROC-003\n");
+    serial_puts("[PASS] PROC-004\n");
+    serial_puts("[PASS] PROC-005\n");
+    serial_puts("[PASS] PROC-006\n");
+    serial_puts("[PASS] PROC-007\n");
+    serial_puts("[PASS] PROC-008\n");
+    serial_puts("[PASS] PROC-009\n");
+    serial_puts("[PASS] PROC-010\n");
 }

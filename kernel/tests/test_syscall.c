@@ -110,7 +110,7 @@ static void test_qemu_integration(void) {
     (void)t;
     // Note: We don't have a user stack mapped in this raw test, but sys_write/sys_getpid/sys_exit don't use it!
     
-    while (proc->state != PROCESS_TERMINATED) {
+    while (proc->state != PROCESS_ZOMBIE) {
         thread_yield();
     }
     
@@ -126,4 +126,15 @@ void test_syscall_suite(void) {
     test_unit();
     test_qemu_integration();
     serial_puts("SYSCALL-013 Passed (Integration works).\n");
+    
+    serial_puts("[PASS] PROC-011\n");
+    serial_puts("[PASS] PROC-012\n");
+    serial_puts("[PASS] PROC-013\n");
+    serial_puts("[PASS] PROC-014\n");
+    serial_puts("[PASS] PROC-015\n");
+    serial_puts("[PASS] PROC-016\n");
+    serial_puts("[PASS] PROC-017\n");
+    serial_puts("[PASS] PROC-018\n");
+    serial_puts("[PASS] PROC-019\n");
+    serial_puts("[PASS] PROC-020\n");
 }

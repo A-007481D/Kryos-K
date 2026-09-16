@@ -8,6 +8,7 @@ typedef enum {
     THREAD_READY,
     THREAD_RUNNING,
     THREAD_BLOCKED,
+    THREAD_WAITING_CHILD,
     THREAD_DEAD
 } thread_state_t;
 
@@ -49,6 +50,10 @@ void thread_terminate_process(struct process *proc);
 
 // Gets the currently running thread
 struct thread* thread_current(void);
+
+// Wake a thread waiting on a child process
+void thread_wake_waiter(struct thread *t);
+void thread_block_on_process(struct process *proc);
 
 // Timer IRQ handler
 void timer_handler(void);

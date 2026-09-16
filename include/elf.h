@@ -69,6 +69,5 @@ typedef enum {
     ELF_STACK_ERROR
 } elf_load_error_t;
 
-elf_load_error_t process_create_from_elf(void *elf_data, size_t size, struct process **out_proc, uint64_t *out_entry);
-
+elf_load_error_t elf_load_image(address_space_t *as, void *elf_data, size_t size, uint64_t *out_entry, uint64_t *out_rsp, int argc, const char *argv[], int envc, const char *envp[]);
 #endif // KRYOS_ELF_H

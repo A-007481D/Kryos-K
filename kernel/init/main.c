@@ -77,16 +77,23 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     
     vfs_close(f);
     
-    struct process *init_proc = NULL;
-    uint64_t init_entry = 0;
+    struct process *init_proc = process_create();
+    if (!init_proc) {
+        panic(__FILE__, __LINE__, "OOM allocating init proc");
+    }
     
-    err = process_create_from_elf(elf_buf, elf_size, &init_proc, &init_entry);
+    uint64_t init_entry = 0;
+    uint64_t init_rsp = 0;
+    
+    const char *argv[] = {"/init.elf"};
+    
+    err = elf_load_image(&init_proc->as, elf_buf, elf_size, &init_entry, &init_rsp, 1, argv, 0, NULL);
     if (err != 0) {
         panic(__FILE__, __LINE__, "Failed to parse ELF: %d", err);
     }
     kfree(elf_buf);
     
-    struct thread *init_thread = thread_create_user(init_proc, init_entry, 0x0000800000000000ULL - 8);
+    struct thread *init_thread = thread_create_user(init_proc, init_entry, init_rsp);
     if (!init_thread) {
         panic(__FILE__, __LINE__, "Failed to create init thread");
     }

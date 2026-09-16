@@ -185,7 +185,6 @@ static void reap_dead_threads(void) {
                 head = next_node;
                 start = next_node; 
             }
-            struct process *dead_proc = curr->process;
             if (curr->kernel_stack_base) {
                 kfree(curr->kernel_stack_base);
             }
@@ -198,31 +197,6 @@ static void reap_dead_threads(void) {
                 head = NULL;
                 break;
             }
-            
-            // Check if process should be destroyed
-            if (dead_proc && dead_proc != kernel_process && dead_proc->state == PROCESS_TERMINATED) {
-                bool has_threads = false;
-                if (head) {
-                    struct thread *chk = head;
-                    do {
-                        if (chk->process == dead_proc) {
-                            has_threads = true;
-                            break;
-                        }
-                        chk = chk->next;
-                    } while (chk != head);
-                }
-                if (!has_threads) {
-                    KASSERT(current->process != dead_proc && "Reaper must not destroy active process");
-                    for (int i = 0; i < MAX_FDS; i++) {
-                        if (dead_proc->fd_table[i]) {
-                            vfs_close(dead_proc->fd_table[i]);
-                            dead_proc->fd_table[i] = NULL;
-                        }
-                    }
-                    process_destroy(dead_proc);
-                }
-            }
         } else {
             prev = curr;
         }
@@ -230,6 +204,24 @@ static void reap_dead_threads(void) {
         curr = next_node;
         if (curr == start) done = true;
     }
+}
+
+void thread_wake_waiter(struct thread *t) {
+    if (!t) return;
+    irq_state_t flags = irq_save();
+    if (t->state == THREAD_WAITING_CHILD) {
+        t->state = THREAD_READY;
+    }
+    irq_restore(flags);
+}
+
+void thread_block_on_process(struct process *proc) {
+    if (!proc) return;
+    irq_state_t flags = irq_save();
+    proc->waiter = current;
+    current->state = THREAD_WAITING_CHILD;
+    irq_restore(flags);
+    schedule();
 }
 
 void schedule(void) {

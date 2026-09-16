@@ -67,6 +67,13 @@ struct process* process_create(void) {
         con2->private_data = NULL;
         proc->fd_table[2] = con2;
     }
+    proc->parent = thread_current() ? thread_current()->process : kernel_process;
+    proc->children_head = NULL;
+    proc->next_sibling = proc->parent->children_head;
+    proc->parent->children_head = proc;
+    
+    proc->exit_status = 0;
+    proc->waiter = NULL;
     
     if (!vmm_create_address_space(&proc->as)) {
         kfree(proc);
@@ -79,18 +86,55 @@ struct process* process_create(void) {
 void process_destroy(struct process* proc) {
     if (!proc || proc == kernel_process) return;
     
+    // Remove from parent's children list
+    if (proc->parent) {
+        struct process **curr = &proc->parent->children_head;
+        while (*curr && *curr != proc) {
+            curr = &(*curr)->next_sibling;
+        }
+        if (*curr == proc) {
+            *curr = proc->next_sibling;
+        }
+    }
+    
     vmm_destroy_address_space(&proc->as);
     kfree(proc);
 }
 
-void process_terminate(struct process* proc) {
+void process_reparent_children(struct process *proc, struct process *new_parent) {
+    if (!proc || !new_parent) return;
+    
+    struct process *child = proc->children_head;
+    while (child) {
+        struct process *next = child->next_sibling;
+        child->parent = new_parent;
+        child->next_sibling = new_parent->children_head;
+        new_parent->children_head = child;
+        child = next;
+    }
+    proc->children_head = NULL;
+}
+
+void process_exit(struct process *proc, int status) {
     if (!proc || proc == kernel_process) return;
     
-    // Transition the process to terminated state.
-    proc->state = PROCESS_TERMINATED;
+    proc->exit_status = status;
+    proc->state = PROCESS_ZOMBIE;
     
-    // Mark all threads belonging to this process as dead.
-    // The thread reaper will free the thread structs on the next schedule(),
-    // and when all threads are dead, it will destroy the address space.
+    // Reparent children to kernel_process (PID 0)
+    process_reparent_children(proc, kernel_process);
+    
+    // Wake up parent if waiting
+    if (proc->parent && proc->parent->waiter) {
+        thread_wake_waiter(proc->parent->waiter);
+        proc->parent->waiter = NULL;
+    }
+    
+    // Kill threads, scheduler reaper will clean them up
     thread_terminate_process(proc);
 }
+
+void process_terminate(struct process* proc) {
+    process_exit(proc, -1);
+}
+

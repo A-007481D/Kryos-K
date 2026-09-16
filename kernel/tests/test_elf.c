@@ -7,6 +7,18 @@
 
 static uint8_t elf_buf[8192];
 
+static elf_load_error_t process_create_from_elf(void *elf_data, size_t size, struct process **out_proc, uint64_t *out_entry) {
+    *out_proc = process_create();
+    if (!*out_proc) return ELF_VMM_ERROR;
+    uint64_t rsp = 0;
+    elf_load_error_t err = elf_load_image(&(*out_proc)->as, elf_data, size, out_entry, &rsp, 0, NULL, 0, NULL);
+    if (err != ELF_LOAD_SUCCESS) {
+        process_destroy(*out_proc);
+        *out_proc = NULL;
+    }
+    return err;
+}
+
 static void craft_valid_elf(void) {
     memset(elf_buf, 0, sizeof(elf_buf));
     Elf64_Ehdr *ehdr = (Elf64_Ehdr*)elf_buf;

@@ -46,9 +46,10 @@ syscall_entry:
     push r15
 
     ; 4. Setup C arguments and call dispatcher.
-    ; C signature: syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2)
-    ; C expects args in RDI, RSI, RDX, RCX.
+    ; C signature: syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, void *frame)
+    ; C expects args in RDI, RSI, RDX, RCX, R8.
     ; Incoming ABI has them in RAX, RDI, RSI, RDX.
+    mov r8, rsp       ; frame -> C arg 5
     mov rcx, rdx      ; arg2 -> C arg 4
     mov rdx, rsi      ; arg1 -> C arg 3
     mov rsi, rdi      ; arg0 -> C arg 2
