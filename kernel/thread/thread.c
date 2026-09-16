@@ -2,6 +2,9 @@
 #include "../../include/heap.h"
 #include "../../include/process.h"
 #include "../lib/irq.h"
+#include "../../include/pmm.h"
+#include "../../include/vfs.h"
+#include "../memory/virt.h"
 #include "../interrupts/pic.h"
 #include "../interrupts/gdt.h"
 #include <assert.h>
@@ -211,6 +214,12 @@ static void reap_dead_threads(void) {
                 }
                 if (!has_threads) {
                     KASSERT(current->process != dead_proc && "Reaper must not destroy active process");
+                    for (int i = 0; i < MAX_FDS; i++) {
+                        if (dead_proc->fd_table[i]) {
+                            vfs_close(dead_proc->fd_table[i]);
+                            dead_proc->fd_table[i] = NULL;
+                        }
+                    }
                     process_destroy(dead_proc);
                 }
             }

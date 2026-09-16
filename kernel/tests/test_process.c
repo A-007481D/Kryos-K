@@ -107,9 +107,11 @@ static void test_process_006_ownership(void) {
     
     KASSERT(tA->process == pA);
     
-    // clean up memory manually since we can't run it
-    kfree(tA->kernel_stack_base);
-    kfree(tA);
+    // Let the reaper clean up tA from the linked list
+    tA->state = THREAD_DEAD;
+    thread_yield(); // Run the reaper
+    
+    // We cannot kfree here, the reaper will do it.
     process_destroy(pA);
     
     serial_puts("[PASS] process_006_pml4_ownership\n");

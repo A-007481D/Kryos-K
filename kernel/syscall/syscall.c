@@ -4,6 +4,8 @@
 #include "../../include/thread.h"
 #include "../../include/process.h"
 #include "../../kernel/memory/vmm.h"
+#include "../../include/heap.h"
+#include "../../include/vfs.h"
 #include <stddef.h>
 
 extern void syscall_entry(void);
@@ -30,24 +32,115 @@ static uint64_t sys_getpid(void) {
 }
 
 static uint64_t sys_write(uint64_t fd, const void* buf, size_t len) {
-    if (fd != 1) {
+    struct process *proc = thread_current()->process;
+    if (fd >= MAX_FDS || !proc->fd_table[fd]) {
         return (uint64_t)-EBADF;
     }
 
-    if (len > 4096) {
-        len = 4096; // bound check
-    }
+    if (len > 4096) len = 4096;
 
     if (!user_range_readable(buf, len)) {
         return (uint64_t)-EFAULT;
     }
-
-    const char* str = (const char*)buf;
+    
+    // Kernel buffering
+    void *kbuf = kmalloc(len);
+    if (!kbuf) return (uint64_t)-ENOMEM;
+    
+    // Since we verified user_range_readable, direct memcpy works
     for (size_t i = 0; i < len; i++) {
-        serial_putc(str[i]);
+        ((char*)kbuf)[i] = ((const char*)buf)[i];
     }
+    
+    size_t bytes_written = 0;
+    int err = vfs_write(proc->fd_table[fd], kbuf, len, &bytes_written);
+    kfree(kbuf);
+    
+    if (err < 0) return (uint64_t)err;
+    return bytes_written;
+}
 
-    return len;
+static uint64_t sys_open(const char* path, uint64_t flags) {
+    if (flags != 0) { // O_RDONLY = 0
+        return (uint64_t)-EINVAL;
+    }
+    
+    // Validate path pointer
+    if (!user_range_readable(path, 1)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    // Bounded path copy
+    char kpath[256];
+    size_t i = 0;
+    while (i < 255) {
+        if (!user_range_readable(path + i, 1)) return (uint64_t)-EFAULT;
+        kpath[i] = path[i];
+        if (kpath[i] == '\0') break;
+        i++;
+    }
+    if (i == 255 && kpath[254] != '\0') return (uint64_t)-EINVAL; // Oversized path
+    kpath[i] = '\0';
+    
+    struct process *proc = thread_current()->process;
+    int fd = -1;
+    for (int j = 3; j < MAX_FDS; j++) {
+        if (proc->fd_table[j] == NULL) {
+            fd = j;
+            break;
+        }
+    }
+    if (fd == -1) return (uint64_t)-ENOMEM; // Exhausted
+    
+    struct file *f = NULL;
+    int err = vfs_open(kpath, flags, &f);
+    if (err < 0) return (uint64_t)err;
+    
+    proc->fd_table[fd] = f;
+    return fd;
+}
+
+static uint64_t sys_read(uint64_t fd, void* buf, size_t count) {
+    struct process *proc = thread_current()->process;
+    if (fd >= MAX_FDS || !proc->fd_table[fd]) {
+        return (uint64_t)-EBADF;
+    }
+    
+    if (count > 4096) count = 4096;
+    
+    if (!user_range_writable(buf, count)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    void *kbuf = kmalloc(count);
+    if (!kbuf) return (uint64_t)-ENOMEM;
+    
+    size_t bytes_read = 0;
+    int err = vfs_read(proc->fd_table[fd], kbuf, count, &bytes_read);
+    
+    if (err >= 0) {
+        // Copy out
+        for (size_t i = 0; i < bytes_read; i++) {
+            ((char*)buf)[i] = ((const char*)kbuf)[i];
+        }
+    }
+    
+    kfree(kbuf);
+    
+    if (err < 0) return (uint64_t)err;
+    return bytes_read;
+}
+
+static uint64_t sys_close(uint64_t fd) {
+    struct process *proc = thread_current()->process;
+    if (fd >= MAX_FDS || !proc->fd_table[fd]) {
+        return (uint64_t)-EBADF;
+    }
+    
+    int err = vfs_close(proc->fd_table[fd]);
+    proc->fd_table[fd] = NULL;
+    
+    return err;
 }
 
 _Noreturn static void sys_exit(uint64_t code) {
@@ -64,6 +157,12 @@ uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2) {
             return sys_write(a0, (const void*)a1, a2);
         case 2:
             return sys_getpid();
+        case 3:
+            return sys_open((const char*)a0, a1);
+        case 4:
+            return sys_read(a0, (void*)a1, a2);
+        case 5:
+            return sys_close(a0);
         default:
             return (uint64_t)-ENOSYS;
     }

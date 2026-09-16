@@ -35,7 +35,7 @@ static void test_unit(void) {
     serial_puts("SYSCALL-006 Passed.\n");
 
     // SYSCALL-004: Invalid FD
-    ret = syscall_dispatch(1, 2, 0, 0); // fd=2
+    ret = syscall_dispatch(1, 3, 0, 0); // fd=3
     KASSERT(ret == (uint64_t)-EBADF);
     serial_puts("SYSCALL-004 Passed.\n");
 

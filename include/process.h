@@ -15,10 +15,15 @@ typedef enum {
     PROCESS_DEAD
 } process_state_t;
 
+#define MAX_FDS 32
+
+struct file; // forward declaration
+
 struct process {
     pid_t pid;
     process_state_t state;
     address_space_t as;
+    struct file *fd_table[MAX_FDS];
 };
 
 // Global reference to the kernel process (PID 0)

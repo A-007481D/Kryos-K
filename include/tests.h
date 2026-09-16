@@ -8,5 +8,8 @@ void test_thread_suite(void);
 void test_preempt_suite(void);
 void test_user_suite(void);
 void test_process_suite(void);
+void test_tarfs_suite(void);
+void test_vfs_suite(void);
+void test_syscall_fs_suite(void);
 
-#endif
+#endif // KRYOS_TESTS_H

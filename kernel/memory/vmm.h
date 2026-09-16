@@ -39,3 +39,6 @@ bool vmm_is_user_readable(address_space_t *as, uintptr_t va);
 
 // Validates a [start, start+len) range against overflow, user-space bounds, and PTE readability.
 bool user_range_readable(const void *addr, uint64_t len);
+
+bool vmm_is_user_writable(address_space_t *as, uintptr_t va);
+bool user_range_writable(const void *addr, uint64_t len);
