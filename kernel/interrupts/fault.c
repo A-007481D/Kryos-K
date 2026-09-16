@@ -3,6 +3,7 @@
 #include "stdio.h"
 #include "pic.h"
 #include "../../include/thread.h"
+#include "../../include/process.h"
 #include <stddef.h>
 
 volatile exception_test_context_t current_test_context = {0};
@@ -87,7 +88,22 @@ void fault_handler(kernel_interrupt_frame *frame) {
         frame->r14 = current_test_context.recovery_r14;
         frame->r15 = current_test_context.recovery_r15;
         current_test_context.active = false;
-        return;
+        return; // TEST-ONLY: resume kernel test harness via iretq
+    }
+    
+    // Check for real user process faults
+    struct thread* curr = thread_current();
+    if (curr && curr->process && curr->process != kernel_process) {
+        if ((frame->cs & 3) == 3 || (frame->int_no == 14 && (frame->err_code & 4)) || frame->int_no == 0x81) {
+            kprintf("\n--- USER PROCESS FAULT/EXIT ---\n");
+            kprintf("PID: %d, Vector: %d", curr->process->pid, frame->int_no);
+            if (frame->int_no == 0x81) kprintf(" (Test Exit %d)", frame->rdi);
+            kprintf("\n");
+            
+            process_terminate(curr->process);
+            schedule();
+            return;
+        }
     }
     
     // Unhandled exception

@@ -67,7 +67,8 @@ ISR_NOERR 45  ; IRQ13
 ISR_NOERR 46  ; IRQ14
 ISR_NOERR 47  ; IRQ15
 
-ISR_NOERR 128 ; Syscall (0x80)
+ISR_NOERR 128 ; Syscall test vector
+ISR_NOERR 129 ; Test Exit vector
 
 isr_common:
     ; Push general-purpose registers
@@ -179,3 +180,4 @@ isr_stub_table:
     times 128 - 48 dq 0
     
     dq isr_stub_128
+    dq isr_stub_129
