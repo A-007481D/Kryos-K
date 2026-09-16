@@ -9,8 +9,15 @@ typedef struct address_space {
     uint64_t pml4_phys;
 } address_space_t;
 
+typedef enum {
+    PROCESS_RUNNING,
+    PROCESS_TERMINATED,
+    PROCESS_DEAD
+} process_state_t;
+
 struct process {
     pid_t pid;
+    process_state_t state;
     address_space_t as;
 };
 

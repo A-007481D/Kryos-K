@@ -41,6 +41,7 @@ struct thread* thread_create_user(struct process* process, uint64_t rip, uint64_
 // Yields the CPU to the next READY thread in the round-robin list
 void thread_yield(void);
 void schedule(void);
+_Noreturn void schedule_after_exit(void);
 
 // Exits the current thread and yields to another. Never returns.
 void thread_exit(void);

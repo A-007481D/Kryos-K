@@ -21,6 +21,7 @@ struct process* process_create(void) {
     if (!proc) return NULL;
     
     proc->pid = next_pid++;
+    proc->state = PROCESS_RUNNING;
     
     if (!vmm_create_address_space(&proc->as)) {
         kfree(proc);
@@ -40,13 +41,11 @@ void process_destroy(struct process* proc) {
 void process_terminate(struct process* proc) {
     if (!proc || proc == kernel_process) return;
     
-    // Mark all threads belonging to this process as dead.
-    // The thread reaper will free the thread structs on the next schedule().
-    thread_terminate_process(proc);
+    // Transition the process to terminated state.
+    proc->state = PROCESS_TERMINATED;
     
-    // Destroy the address space immediately.
-    // Invariant: the currently executing thread must not be using this address space.
-    // This is guaranteed because process_terminate is only called from the fault handler
-    // when the faulting thread's process needs to be killed (we will schedule() away after).
-    process_destroy(proc);
+    // Mark all threads belonging to this process as dead.
+    // The thread reaper will free the thread structs on the next schedule(),
+    // and when all threads are dead, it will destroy the address space.
+    thread_terminate_process(proc);
 }

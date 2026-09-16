@@ -182,20 +182,37 @@ static void reap_dead_threads(void) {
                 head = next_node;
                 start = next_node; 
             }
+            struct process *dead_proc = curr->process;
             if (curr->kernel_stack_base) {
                 kfree(curr->kernel_stack_base);
             }
             if (curr->user_stack_base) {
                 kfree(curr->user_stack_base);
             }
-            // NOTE: process lifecycle is NOT owned by the thread reaper.
-            // process_terminate() is responsible for calling process_destroy()
-            // after all threads are confirmed dead.
             kfree(curr);
             
             if (curr == next_node) {
                 head = NULL;
                 break;
+            }
+            
+            // Check if process should be destroyed
+            if (dead_proc && dead_proc != kernel_process && dead_proc->state == PROCESS_TERMINATED) {
+                bool has_threads = false;
+                if (head) {
+                    struct thread *chk = head;
+                    do {
+                        if (chk->process == dead_proc) {
+                            has_threads = true;
+                            break;
+                        }
+                        chk = chk->next;
+                    } while (chk != head);
+                }
+                if (!has_threads) {
+                    KASSERT(current->process != dead_proc && "Reaper must not destroy active process");
+                    process_destroy(dead_proc);
+                }
             }
         } else {
             prev = curr;
@@ -275,6 +292,19 @@ void thread_exit(void) {
     schedule();
     
     KASSERT(false && "thread_exit returned!");
+    while(1);
+}
+
+_Noreturn void schedule_after_exit(void) {
+    KASSERT(current != NULL);
+    
+    __asm__ volatile("cli");
+    
+    // The process has been marked TERMINATED and threads DEAD by sys_exit().
+    // We just need to schedule away.
+    schedule();
+    
+    KASSERT(false && "schedule_after_exit returned!");
     while(1);
 }
 
