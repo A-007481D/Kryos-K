@@ -1,0 +1,47 @@
+
+build/user/test_spawn.elf:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000400000 <_start>:
+  400000:	31 f6                	xor    %esi,%esi
+  400002:	b8 07 00 00 00       	mov    $0x7,%eax
+  400007:	48 c7 c7 00 10 40 00 	mov    $0x401000,%rdi
+  40000e:	48 89 f2             	mov    %rsi,%rdx
+  400011:	0f 05                	syscall
+  400013:	48 85 c0             	test   %rax,%rax
+  400016:	78 5a                	js     400072 <_start+0x72>
+  400018:	48 83 ec 10          	sub    $0x10,%rsp
+  40001c:	31 c9                	xor    %ecx,%ecx
+  40001e:	48 89 c7             	mov    %rax,%rdi
+  400021:	31 d2                	xor    %edx,%edx
+  400023:	89 4c 24 0c          	mov    %ecx,0xc(%rsp)
+  400027:	b8 06 00 00 00       	mov    $0x6,%eax
+  40002c:	48 8d 74 24 0c       	lea    0xc(%rsp),%rsi
+  400031:	0f 05                	syscall
+  400033:	48 39 c7             	cmp    %rax,%rdi
+  400036:	74 1a                	je     400052 <_start+0x52>
+  400038:	48 89 d0             	mov    %rdx,%rax
+  40003b:	bf 02 00 00 00       	mov    $0x2,%edi
+  400040:	48 89 d6             	mov    %rdx,%rsi
+  400043:	0f 05                	syscall
+  400045:	90                   	nop
+  400046:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+  40004d:	00 00 00 
+  400050:	eb fe                	jmp    400050 <_start+0x50>
+  400052:	31 c0                	xor    %eax,%eax
+  400054:	48 63 7c 24 0c       	movslq 0xc(%rsp),%rdi
+  400059:	48 89 c6             	mov    %rax,%rsi
+  40005c:	48 89 c2             	mov    %rax,%rdx
+  40005f:	0f 05                	syscall
+  400061:	90                   	nop
+  400062:	0f 1f 00             	nopl   (%rax)
+  400065:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+  40006c:	00 00 00 00 
+  400070:	eb fe                	jmp    400070 <_start+0x70>
+  400072:	48 89 f0             	mov    %rsi,%rax
+  400075:	bf 01 00 00 00       	mov    $0x1,%edi
+  40007a:	0f 05                	syscall
+  40007c:	0f 1f 40 00          	nopl   0x0(%rax)
+  400080:	eb fe                	jmp    400080 <_start+0x80>

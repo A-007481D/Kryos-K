@@ -44,17 +44,26 @@ OBJS = \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
     $(BUILD_DIR)/kernel/tests/test_syscall.o \
+    $(BUILD_DIR)/kernel/tests/test_process_hierarchy.o \
     $(BUILD_DIR)/kernel/tests/test_tarfs.o \
     $(BUILD_DIR)/kernel/tests/test_vfs.o \
     $(BUILD_DIR)/kernel/tests/test_syscall_fs.o \
+    $(BUILD_DIR)/kernel/tests/test_framework.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
 .PHONY: all clean iso run debug test
 
 USER_INIT = $(BUILD_DIR)/user/init.elf
+USER_TEST_TARGET = $(BUILD_DIR)/user/test_target.elf
+USER_TEST_SPAWN = $(BUILD_DIR)/user/test_spawn.elf
+USER_TEST_EXEC = $(BUILD_DIR)/user/test_exec.elf
+USER_TEST_ROLLBACK = $(BUILD_DIR)/user/test_rollback.elf
+
 INITRD = $(BUILD_DIR)/initrd.tar
 
-all: $(KERNEL_ELF) $(USER_INIT) $(INITRD)
+USER_BINARIES = $(USER_INIT) $(USER_TEST_TARGET) $(USER_TEST_SPAWN) $(USER_TEST_EXEC) $(USER_TEST_ROLLBACK)
+
+all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -71,12 +80,12 @@ $(BUILD_DIR)/%.o: %.S
 $(KERNEL_ELF): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-$(USER_INIT): user/init.c
+$(BUILD_DIR)/user/%.elf: user/%.c user/syscall.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -Wl,-Ttext=0x400000 $< -o $@
+	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,-Ttext=0x400000 $< -o $@
 
-$(INITRD): $(USER_INIT)
-	tar -cf $@ -C $(BUILD_DIR)/user init.elf
+$(INITRD): $(USER_BINARIES)
+	tar -cf $@ -C $(BUILD_DIR)/user init.elf test_target.elf test_spawn.elf test_exec.elf test_rollback.elf
 
 iso: $(KERNEL_ISO)
 

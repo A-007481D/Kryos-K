@@ -4,7 +4,8 @@ import sys
 import time
 import os
 
-EXPECTED_PASSES = [
+EXPECTED_TESTS = [
+    # Legacy passes for now, we will slowly migrate them to TEST_ASSERT
     "[PASS] boot",
     "[PASS] long_mode",
     "[PASS] higher_half",
@@ -91,33 +92,37 @@ EXPECTED_PASSES = [
     "FS-006 Passed.",
     "FS-008 Passed.",
     "FS-009 Passed.",
-    "[PASS] PROC-001",
-    "[PASS] PROC-002",
-    "[PASS] PROC-003",
-    "[PASS] PROC-004",
-    "[PASS] PROC-005",
-    "[PASS] PROC-006",
-    "[PASS] PROC-007",
-    "[PASS] PROC-008",
-    "[PASS] PROC-009",
-    "[PASS] PROC-010",
-    "[PASS] PROC-011",
-    "[PASS] PROC-012",
-    "[PASS] PROC-013",
-    "[PASS] PROC-014",
-    "[PASS] PROC-015",
-    "[PASS] PROC-016",
-    "[PASS] PROC-017",
-    "[PASS] PROC-018",
-    "[PASS] PROC-019",
-    "[PASS] PROC-020",
-    "@@KRYOS:SUITE:PASS"
+    
+    # New strict tests
+    "PROC-001",
+    "PROC-002",
+    "PROC-003",
+    "PROC-004",
+    "PROC-005",
+    "PROC-006",
+    "PROC-007",
+    "PROC-008",
+    "PROC-009",
+    "PROC-010",
+    "PROC-011",
+    "PROC-012",
+    "PROC-013",
+    "PROC-014",
+    "PROC-015",
+    "PROC-016",
+    "PROC-017",
+    "PROC-018",
+    "PROC-019",
+    "PROC-020",
+    "EXEC-001",
+    "EXEC-002",
+    "EXEC-003",
+    "EXEC-004"
 ]
 
 def main():
     print("=== Kryos Test Runner ===")
     
-    # 1. Build ISO
     print("Building Kryos...")
     res = subprocess.run(["make", "clean"], capture_output=True)
     res = subprocess.run(["make", "iso"], capture_output=True)
@@ -131,7 +136,6 @@ def main():
         print("ISO not found at", iso_path)
         sys.exit(1)
         
-    # 2. Run QEMU
     print("Booting QEMU...")
     cmd = [
         "qemu-system-x86_64",
@@ -153,6 +157,10 @@ def main():
     tests_completed = False
     expecting_panic = False
     
+    running_tests = set()
+    passed_tests = set()
+    legacy_passed = set()
+    
     while True:
         if time.time() - start_time > timeout:
             process.kill()
@@ -168,6 +176,37 @@ def main():
             print(f"| {line}")
             output.append(line)
             
+            # Parse strict TEST_ASSERT logic
+            if line.startswith("@@KRYOS:TEST:"):
+                parts = line.split(":")
+                if len(parts) >= 4:
+                    test_name = parts[2]
+                    status = parts[3]
+                    
+                    if status == "BEGIN":
+                        if test_name in passed_tests or test_name in running_tests:
+                            print(f"\n[FAIL] Duplicate test registered: {test_name}")
+                            process.kill()
+                            sys.exit(1)
+                        running_tests.add(test_name)
+                    elif status == "PASS":
+                        if test_name not in running_tests:
+                            print(f"\n[FAIL] Test PASS without BEGIN: {test_name}")
+                            process.kill()
+                            sys.exit(1)
+                        running_tests.remove(test_name)
+                        passed_tests.add(test_name)
+                    elif status == "FAIL":
+                        print(f"\n[FAIL] Explicit test failure: {test_name}")
+                        process.kill()
+                        sys.exit(1)
+            
+            # Legacy matching
+            for legacy in EXPECTED_TESTS:
+                if legacy.startswith("[PASS]") or legacy.endswith("Passed."):
+                    if legacy in line:
+                        legacy_passed.add(legacy)
+                        
             if "@@KRYOS:SUITE:PASS" in line:
                 tests_completed = True
                 
@@ -193,7 +232,19 @@ def main():
         print("[FAIL] KERNEL PANIC (Unexpected)")
         sys.exit(1)
         
-    missing = [e for e in EXPECTED_PASSES if e not in output]
+    if running_tests:
+        print(f"[FAIL] Tests started but did not finish: {running_tests}")
+        sys.exit(1)
+        
+    missing = []
+    for e in EXPECTED_TESTS:
+        if e.startswith("PROC-") or e.startswith("EXEC-"):
+            if e not in passed_tests:
+                missing.append(e)
+        else:
+            if e not in legacy_passed:
+                missing.append(e)
+                
     if missing:
         print("[FAIL] NO TEST COMPLETION: Missing expected output:")
         for m in missing:

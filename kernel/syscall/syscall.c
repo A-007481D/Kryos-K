@@ -8,6 +8,7 @@
 #include "../../include/vfs.h"
 #include "../../include/elf.h"
 #include "../../include/tarfs.h"
+#include "../../include/stdio.h"
 #include <stddef.h>
 
 extern void syscall_entry(void);
@@ -158,7 +159,9 @@ static uint64_t sys_waitpid(int64_t pid, int *status) {
     struct process *proc = thread_current()->process;
     
     if (pid != -1 && pid <= 0) return (uint64_t)-EINVAL;
-    if (status && !user_range_writable(status, sizeof(int))) return (uint64_t)-EFAULT;
+    if (status && !user_range_writable(status, sizeof(int))) {
+        return (uint64_t)-EFAULT;
+    }
     
     while (1) {
         bool has_children = false;
@@ -319,7 +322,8 @@ static uint64_t sys_execve(const char *path, const char *argv[], const char *env
 uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, struct syscall_frame *frame) {
     switch (nr) {
         case 0:
-            sys_exit(a0); // _Noreturn
+            sys_exit(a0);
+            return 0;
         case 1:
             return sys_write(a0, (const void*)a1, a2);
         case 2:

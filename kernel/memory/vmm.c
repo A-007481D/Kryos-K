@@ -47,9 +47,15 @@ uint64_t vmm_get_current_pml4(void) {
     return cr3 & PTE_FRAME_MASK;
 }
 
+#include "../../include/msr.h"
+
 void vmm_init(uint64_t pml4_phys) {
     current_pml4_phys = pml4_phys;
     pml4_table = (uint64_t*)phys_to_virt(current_pml4_phys);
+    
+    // Enable EFER.NXE (bit 11) to allow VMM_FLAG_NO_EXECUTE
+    uint64_t efer = rdmsr(MSR_EFER);
+    wrmsr(MSR_EFER, efer | (1ULL << 11));
 }
 
 // Internal helper to get the next level table, allocating if necessary

@@ -932,6 +932,7 @@ void run_kernel_tests(void) {
     test_user();
     
     test_process_suite();
+    test_process_hierarchy_suite();
     
     extern void test_elf(void);
     test_elf();

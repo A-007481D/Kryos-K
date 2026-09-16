@@ -45,17 +45,49 @@ syscall_entry:
     push r14
     push r15
 
+    ; Save caller-saved registers so user mode doesn't lose them!
+    ; The kernel C function might clobber them.
+    push rdi
+    push rsi
+    push rdx
+    push r8
+    push r9
+    push r10
+
     ; 4. Setup C arguments and call dispatcher.
     ; C signature: syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, void *frame)
     ; C expects args in RDI, RSI, RDX, RCX, R8.
     ; Incoming ABI has them in RAX, RDI, RSI, RDX.
-    mov r8, rsp       ; frame -> C arg 5
+    ; BUT wait, we just pushed RDI, RSI, RDX, R8, R9, R10!
+    ; We can read them from the stack, or just not overwrite them before we need them.
+    ; Actually, they are still in their registers because PUSH doesn't change them!
+    
+    ; frame is at RSP + (6 * 8) = RSP + 48 (since we pushed 6 caller-saved regs)
+    ; Wait, no. frame is a pointer to syscall_frame. The frame struct has
+    ; r15, r14, r13, r12, rbp, rbx, r11, rcx, r10.
+    ; Wait, we just added 6 more registers to the stack. This changes the offset of `frame`!
+    ; In Kryos, `struct syscall_frame` is defined in include/syscall.h.
+    ; We should pop them before passing frame, or we just pass the correct frame pointer.
+    ; Let's just pop them AFTER the call!
+    
+    ; C expects frame in R8.
+    mov r8, rsp
+    add r8, 48        ; frame -> C arg 5 (points to r15)
+    
     mov rcx, rdx      ; arg2 -> C arg 4
     mov rdx, rsi      ; arg1 -> C arg 3
     mov rsi, rdi      ; arg0 -> C arg 2
     mov rdi, rax      ; nr   -> C arg 1
 
     call syscall_dispatch
+
+    ; Restore caller-saved registers
+    pop r10
+    pop r9
+    pop r8
+    pop rdx
+    pop rsi
+    pop rdi
 
     ; 5. Restore registers and return.
     ; The return value from syscall_dispatch is in RAX, exactly where

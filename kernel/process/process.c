@@ -5,6 +5,7 @@
 #include "../../include/pmm.h"
 #include "../../include/thread.h"
 #include "../../include/vfs.h"
+#include "../../include/stdio.h"
 #include <stddef.h>
 
 static struct process _kernel_process = {0};
