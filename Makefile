@@ -14,6 +14,7 @@ KERNEL_ISO = $(BUILD_DIR)/kryos.iso
 
 OBJS = \
     build/kernel/process/process.o \
+    build/kernel/process/elf.o \
     $(BUILD_DIR)/arch/x86_64/boot/boot.o \
     $(BUILD_DIR)/arch/x86_64/boot/long_mode_start.o \
     $(BUILD_DIR)/arch/x86_64/interrupts/isr.o \
@@ -28,6 +29,7 @@ OBJS = \
     $(BUILD_DIR)/kernel/thread/usermode.o \
     $(BUILD_DIR)/arch/x86_64/thread/switch.o \
     $(BUILD_DIR)/drivers/serial/serial.o \
+    $(BUILD_DIR)/kernel/lib/string.o \
     $(BUILD_DIR)/kernel/lib/stdio.o \
     $(BUILD_DIR)/kernel/lib/assert.o \
     $(BUILD_DIR)/kernel/interrupts/gdt.o \
@@ -35,11 +37,14 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/interrupts/pic.o \
     $(BUILD_DIR)/kernel/interrupts/pit.o \
+    $(BUILD_DIR)/kernel/tests/test_elf.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
 .PHONY: all clean iso run debug test
 
-all: $(KERNEL_ELF)
+USER_INIT = $(BUILD_DIR)/user/init.elf
+
+all: $(KERNEL_ELF) $(USER_INIT)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -56,11 +61,17 @@ $(BUILD_DIR)/%.o: %.S
 $(KERNEL_ELF): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
+$(USER_INIT): user/init.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -Wl,-Ttext=0x400000 $< -o $@
+
 iso: $(KERNEL_ISO)
 
-$(KERNEL_ISO): $(KERNEL_ELF) boot/grub/grub.cfg
+$(KERNEL_ISO): $(KERNEL_ELF) $(USER_INIT) boot/grub/grub.cfg
 	@mkdir -p $(ISO_DIR)/boot/grub
+	@mkdir -p $(ISO_DIR)/boot/modules
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/kryos.elf
+	cp $(USER_INIT) $(ISO_DIR)/boot/modules/init.elf
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	grub-mkrescue -o $(KERNEL_ISO) $(ISO_DIR)
 
