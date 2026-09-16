@@ -67,6 +67,8 @@ ISR_NOERR 45  ; IRQ13
 ISR_NOERR 46  ; IRQ14
 ISR_NOERR 47  ; IRQ15
 
+ISR_NOERR 128 ; Syscall (0x80)
+
 isr_common:
     ; Push general-purpose registers
     push rax
@@ -172,3 +174,8 @@ isr_stub_table:
     dq isr_stub_45
     dq isr_stub_46
     dq isr_stub_47
+    
+    ; Pad table up to 127
+    times 128 - 48 dq 0
+    
+    dq isr_stub_128

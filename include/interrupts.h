@@ -21,12 +21,15 @@ typedef struct {
     uint64_t rip;
     uint64_t cs;
     uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
 } __attribute__((packed)) kernel_interrupt_frame;
 
 _Static_assert(offsetof(kernel_interrupt_frame, int_no) == 15 * 8, "int_no offset is wrong");
 _Static_assert(offsetof(kernel_interrupt_frame, err_code) == 16 * 8, "err_code offset is wrong");
 _Static_assert(offsetof(kernel_interrupt_frame, rip) == 17 * 8, "rip offset is wrong");
-_Static_assert(sizeof(kernel_interrupt_frame) == 20 * 8, "kernel_interrupt_frame size is wrong");
+_Static_assert(offsetof(kernel_interrupt_frame, rsp) == 20 * 8, "rsp offset is wrong");
+_Static_assert(sizeof(kernel_interrupt_frame) == 22 * 8, "kernel_interrupt_frame size is wrong");
 
 typedef struct {
     uint64_t recovery_rip;
@@ -39,6 +42,7 @@ typedef struct {
     uint64_t recovery_r15;
     uint8_t  expected_vector;
     uint64_t expected_cr2; // Only used for Page Faults (#PF)
+    uint64_t test_id;
     bool     active;
 } exception_test_context_t;
 
