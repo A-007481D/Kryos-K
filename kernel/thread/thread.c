@@ -2,6 +2,7 @@
 #include "../../include/heap.h"
 #include "../lib/irq.h"
 #include "../interrupts/pic.h"
+#include "../interrupts/gdt.h"
 #include <assert.h>
 #include <serial.h>
 #include <stddef.h>
@@ -23,8 +24,10 @@ void thread_init(void) {
     
     main_thread->id = 0;
     main_thread->rsp = 0; 
-    main_thread->stack_base = NULL;
-    main_thread->stack_size = 0;
+    main_thread->kernel_stack_base = NULL;
+    main_thread->kernel_stack_size = 0;
+    main_thread->user_stack_base = NULL;
+    main_thread->user_stack_size = 0;
     main_thread->state = THREAD_RUNNING;
     main_thread->next = main_thread;
     
@@ -50,11 +53,14 @@ struct thread* thread_create(void (*entry_point)(void)) {
     KASSERT(t != NULL);
     
     t->id = next_tid++;
-    t->stack_size = STACK_SIZE;
-    t->stack_base = kmalloc(t->stack_size);
-    KASSERT(t->stack_base != NULL);
+    t->kernel_stack_size = STACK_SIZE;
+    t->kernel_stack_base = kmalloc(t->kernel_stack_size);
+    KASSERT(t->kernel_stack_base != NULL);
     
-    uint64_t* stack_top = (uint64_t*)((uint8_t*)t->stack_base + t->stack_size);
+    t->user_stack_size = 0;
+    t->user_stack_base = NULL;
+    
+    uint64_t* stack_top = (uint64_t*)((uint8_t*)t->kernel_stack_base + t->kernel_stack_size);
     
     uintptr_t top = (uintptr_t)stack_top;
     top &= ~0xFULL;
@@ -109,8 +115,11 @@ static void reap_dead_threads(void) {
                 head = next_node;
                 start = next_node; 
             }
-            if (curr->stack_base) {
-                kfree(curr->stack_base);
+            if (curr->kernel_stack_base) {
+                kfree(curr->kernel_stack_base);
+            }
+            if (curr->user_stack_base) {
+                kfree(curr->user_stack_base);
             }
             kfree(curr);
             
@@ -159,6 +168,10 @@ static void schedule(void) {
     current->state = THREAD_RUNNING;
     
     in_scheduler = false;
+    
+    if (next->kernel_stack_base) {
+        tss_set_rsp0((uint64_t)next->kernel_stack_base + next->kernel_stack_size);
+    }
     
     if (old != current) {
         context_switch(old, current);

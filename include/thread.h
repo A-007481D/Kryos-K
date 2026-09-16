@@ -15,8 +15,11 @@ struct thread {
     uint64_t id;
     uint64_t rsp;
 
-    void *stack_base;
-    size_t stack_size;
+    void *kernel_stack_base;
+    size_t kernel_stack_size;
+
+    void *user_stack_base;
+    size_t user_stack_size;
 
     thread_state_t state;
     struct thread *next;
