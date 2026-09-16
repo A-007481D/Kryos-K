@@ -33,3 +33,9 @@ bool vmm_get_phys(address_space_t *as, uint64_t virt_addr, uint64_t* out_phys);
 
 // Get the currently active PML4 physical address.
 uint64_t vmm_get_current_pml4(void);
+
+// Checks if a virtual address is mapped and has USER privilege (readable from CPL3).
+bool vmm_is_user_readable(address_space_t *as, uintptr_t va);
+
+// Validates a [start, start+len) range against overflow, user-space bounds, and PTE readability.
+bool user_range_readable(const void *addr, uint64_t len);

@@ -1,6 +1,7 @@
 #include "vmm.h"
 #include "../../include/process.h"
 #include "../../include/pmm.h"
+#include "../../include/thread.h"
 #include "virt.h"
 #include <stddef.h>
 #include <serial.h>
@@ -232,7 +233,59 @@ void vmm_destroy_address_space(address_space_t *as) {
         }
     }
     
-    // Free the PML4 itself
+// Free the PML4 itself
     pmm_free_page(as->pml4_phys);
     as->pml4_phys = 0;
+}
+
+bool vmm_is_user_readable(address_space_t *as, uintptr_t va) {
+    uint64_t *root = (uint64_t*)phys_to_virt(as->pml4_phys);
+    if (!is_canonical(va)) return false;
+    
+    uint64_t pml4e = root[pml4_index(va)];
+    if (!(pml4e & PTE_PRESENT) || !(pml4e & PTE_USER)) return false;
+    
+    uint64_t* pdpt = (uint64_t*)phys_to_virt(pml4e & PTE_FRAME_MASK);
+    uint64_t pdpte = pdpt[pdpt_index(va)];
+    if (!(pdpte & PTE_PRESENT) || !(pdpte & PTE_USER)) return false;
+    
+    if (pdpte & PDE_PS) return true; 
+    
+    uint64_t* pd = (uint64_t*)phys_to_virt(pdpte & PTE_FRAME_MASK);
+    uint64_t pde = pd[pd_index(va)];
+    if (!(pde & PTE_PRESENT) || !(pde & PTE_USER)) return false;
+    
+    if (pde & PDE_PS) return true;
+    
+    uint64_t* pt = (uint64_t*)phys_to_virt(pde & PTE_FRAME_MASK);
+    uint64_t pte = pt[pt_index(va)];
+    if (!(pte & PTE_PRESENT) || !(pte & PTE_USER)) return false;
+    
+    return true;
+}
+
+bool user_range_readable(const void *addr, uint64_t len) {
+    if (len == 0) return true;
+    
+    uintptr_t start = (uintptr_t)addr;
+    uintptr_t end = start + len;
+    
+    // Overflow check
+    if (end < start) return false;
+    
+    // Canonical user-space boundary check: [start, end) must be <= 0x00007FFFFFFFFFFF + 1
+    // (i.e., end <= 0x0000800000000000)
+    if (end > 0x0000800000000000ULL) return false;
+    
+    // Check every page intersecting the range
+    uintptr_t page_start = start & ~0xFFFULL;
+    address_space_t *as = &thread_current()->process->as;
+    
+    for (uintptr_t va = page_start; va < end; va += PMM_PAGE_SIZE) {
+        if (!vmm_is_user_readable(as, va)) {
+            return false;
+        }
+    }
+    
+    return true;
 }
