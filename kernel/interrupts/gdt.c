@@ -1,7 +1,7 @@
 #include "gdt.h"
 #include <stddef.h>
 
-static struct tss_entry tss;
+struct tss_entry tss;
 static uint64_t gdt[7];
 
 struct gdtr {

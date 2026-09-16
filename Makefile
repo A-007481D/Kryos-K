@@ -37,7 +37,10 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/interrupts/pic.o \
     $(BUILD_DIR)/kernel/interrupts/pit.o \
+    $(BUILD_DIR)/kernel/syscall/syscall.o \
+    $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
+    $(BUILD_DIR)/kernel/tests/test_syscall.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
 .PHONY: all clean iso run debug test
