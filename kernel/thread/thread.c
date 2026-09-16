@@ -1,5 +1,6 @@
 #include "../../include/thread.h"
 #include "../../include/heap.h"
+#include "../../include/process.h"
 #include "../lib/irq.h"
 #include "../interrupts/pic.h"
 #include "../interrupts/gdt.h"
@@ -8,7 +9,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-extern void context_switch(struct thread* old_thread, struct thread* new_thread);
+extern void context_switch(struct thread* old_thread, struct thread* new_thread, uint64_t next_cr3);
 
 static struct thread* current = NULL;
 static struct thread* head = NULL;
@@ -29,6 +30,7 @@ void thread_init(void) {
     main_thread->user_stack_base = NULL;
     main_thread->user_stack_size = 0;
     main_thread->state = THREAD_RUNNING;
+    main_thread->process = kernel_process;
     main_thread->next = main_thread;
     
     current = main_thread;
@@ -48,7 +50,7 @@ static void __attribute__((naked)) thread_start_wrapper(void) {
     );
 }
 
-struct thread* thread_create(void (*entry_point)(void)) {
+struct thread* thread_create_process(void (*entry_point)(void), struct process* process) {
     struct thread* t = kmalloc(sizeof(struct thread));
     KASSERT(t != NULL);
     
@@ -80,6 +82,7 @@ struct thread* thread_create(void (*entry_point)(void)) {
     
     t->rsp = (uint64_t)stack_top;
     t->state = THREAD_READY;
+    t->process = process;
     
     irq_state_t flags = irq_save();
     struct thread* tail = head;
@@ -90,7 +93,12 @@ struct thread* thread_create(void (*entry_point)(void)) {
     t->next = head;
     irq_restore(flags);
     
+    
     return t;
+}
+
+struct thread* thread_create(void (*entry_point)(void)) {
+    return thread_create_process(entry_point, kernel_process);
 }
 
 static void reap_dead_threads(void) {
@@ -174,7 +182,11 @@ static void schedule(void) {
     }
     
     if (old != current) {
-        context_switch(old, current);
+        uint64_t next_cr3 = 0;
+        if (old->process != current->process) {
+            next_cr3 = current->process->as.pml4_phys;
+        }
+        context_switch(old, current, next_cr3);
     }
 }
 

@@ -8,6 +8,7 @@
 #include "../memory/layout.h"
 #include "../../include/heap.h"
 #include "../../include/thread.h"
+#include "../../include/process.h"
 #include "tests.h"
 
 void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
@@ -18,6 +19,7 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     serial_init();
     multiboot_parse(magic, info_addr);
     vmm_init(pml4_phys);
+    process_init();
     kheap_init(KERNEL_HEAP_BASE);
     thread_init();
 

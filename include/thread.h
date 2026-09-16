@@ -11,9 +11,12 @@ typedef enum {
     THREAD_DEAD
 } thread_state_t;
 
+struct process; // Forward declaration
+
 struct thread {
     uint64_t id;
     uint64_t rsp;
+    struct process *process;
 
     void *kernel_stack_base;
     size_t kernel_stack_size;
@@ -30,6 +33,9 @@ void thread_init(void);
 
 // Creates a new kernel thread
 struct thread* thread_create(void (*entry_point)(void));
+
+// Creates a new thread attached to a specific process
+struct thread* thread_create_process(void (*entry_point)(void), struct process* process);
 
 // Yields the CPU to the next READY thread in the round-robin list
 void thread_yield(void);

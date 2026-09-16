@@ -1,5 +1,5 @@
-// void context_switch(struct thread* old_thread, struct thread* new_thread);
-// RDI = old_thread, RSI = new_thread
+// void context_switch(struct thread* old_thread, struct thread* new_thread, uint64_t next_cr3);
+// RDI = old_thread, RSI = new_thread, RDX = next_cr3
 .global context_switch
 context_switch:
     // 1. Save old thread's callee-saved registers
@@ -16,6 +16,12 @@ context_switch:
     
     // 3. Load new thread's stack pointer
     mov 8(%rsi), %rsp
+    
+    // 3.5. Switch CR3 if next_cr3 != 0
+    test %rdx, %rdx
+    jz 1f
+    mov %rdx, %cr3
+1:
     
     // 4. Restore new thread's callee-saved registers
     pop %r15
