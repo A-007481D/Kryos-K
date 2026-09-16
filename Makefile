@@ -13,6 +13,7 @@ KERNEL_ELF = $(BUILD_DIR)/kryos.elf
 KERNEL_ISO = $(BUILD_DIR)/kryos.iso
 
 OBJS = \
+    build/kernel/process/process.o \
     $(BUILD_DIR)/arch/x86_64/boot/boot.o \
     $(BUILD_DIR)/arch/x86_64/boot/long_mode_start.o \
     $(BUILD_DIR)/arch/x86_64/interrupts/isr.o \
@@ -23,6 +24,7 @@ OBJS = \
     $(BUILD_DIR)/kernel/memory/heap.o \
     $(BUILD_DIR)/kernel/thread/thread.o \
     $(BUILD_DIR)/kernel/tests/test_user.o \
+    build/kernel/tests/test_process.o \
     $(BUILD_DIR)/kernel/thread/usermode.o \
     $(BUILD_DIR)/arch/x86_64/thread/switch.o \
     $(BUILD_DIR)/drivers/serial/serial.o \

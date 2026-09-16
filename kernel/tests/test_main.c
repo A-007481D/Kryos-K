@@ -242,11 +242,11 @@ static void test_vmm_001_basic(void) {
     KASSERT(phys_page != 0);
     uint64_t test_virt = 0x0000700000000000ULL;
     
-    bool mapped = vmm_map_page(test_virt, phys_page, VMM_FLAG_WRITABLE);
+    bool mapped = vmm_map_page(&kernel_process->as, test_virt, phys_page, VMM_FLAG_WRITABLE);
     KASSERT(mapped == true);
     
     uint64_t out_phys;
-    KASSERT(vmm_get_phys(test_virt, &out_phys) == true);
+    KASSERT(vmm_get_phys(&kernel_process->as, test_virt, &out_phys) == true);
     KASSERT(out_phys == phys_page);
     
     volatile uint64_t* ptr = (volatile uint64_t*)test_virt;
@@ -260,7 +260,7 @@ static void test_vmm_001_basic(void) {
 static void test_vmm_002_fault(void) {
     uint64_t test_virt = 0x0000700000000000ULL;
     
-    bool unmapped = vmm_unmap_page(test_virt);
+    bool unmapped = vmm_unmap_page(&kernel_process->as, test_virt);
     KASSERT(unmapped == true);
     
     current_test_context.expected_vector = 14; // #PF
@@ -288,15 +288,15 @@ static void test_vmm_003_huge_page(void) {
     uint64_t kernel_virt = (uint64_t)_kernel_start;
     
     uint64_t out_phys;
-    KASSERT(vmm_get_phys(kernel_virt, &out_phys) == true);
+    KASSERT(vmm_get_phys(&kernel_process->as, kernel_virt, &out_phys) == true);
     KASSERT(out_phys == (kernel_virt - 0xFFFFFFFF80000000ULL));
     
     // Attempt to map inside the huge page, should be rejected
     uint64_t new_phys = pmm_alloc_page();
-    KASSERT(vmm_map_page(kernel_virt, new_phys, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_map_page(&kernel_process->as, kernel_virt, new_phys, VMM_FLAG_WRITABLE) == false);
     
     // Attempt to unmap inside the huge page, should be rejected
-    KASSERT(vmm_unmap_page(kernel_virt) == false);
+    KASSERT(vmm_unmap_page(&kernel_process->as, kernel_virt) == false);
     
     pmm_free_page(new_phys);
     serial_puts("[PASS] vmm_003_huge_page\n");
@@ -306,8 +306,8 @@ static void test_vmm_004_alignment(void) {
     uint64_t test_virt = 0x0000700000001000ULL;
     uint64_t phys_page = pmm_alloc_page();
     
-    KASSERT(vmm_map_page(test_virt + 1, phys_page, VMM_FLAG_WRITABLE) == false);
-    KASSERT(vmm_map_page(test_virt, phys_page + 1, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_map_page(&kernel_process->as, test_virt + 1, phys_page, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_map_page(&kernel_process->as, test_virt, phys_page + 1, VMM_FLAG_WRITABLE) == false);
     
     pmm_free_page(phys_page);
     serial_puts("[PASS] vmm_004_alignment\n");
@@ -317,9 +317,9 @@ static void test_vmm_005_canonical(void) {
     uint64_t non_canonical = 0x0000800000000000ULL; // Bit 47 is 1, bits 48-63 are 0
     uint64_t phys_page = pmm_alloc_page();
     
-    KASSERT(vmm_map_page(non_canonical, phys_page, VMM_FLAG_WRITABLE) == false);
-    KASSERT(vmm_unmap_page(non_canonical) == false);
-    KASSERT(vmm_get_phys(non_canonical, NULL) == false);
+    KASSERT(vmm_map_page(&kernel_process->as, non_canonical, phys_page, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_unmap_page(&kernel_process->as, non_canonical) == false);
+    KASSERT(vmm_get_phys(&kernel_process->as, non_canonical, NULL) == false);
     
     pmm_free_page(phys_page);
     serial_puts("[PASS] vmm_005_canonical\n");
@@ -330,12 +330,12 @@ static void test_vmm_006_double_map(void) {
     uint64_t phys_page1 = pmm_alloc_page();
     uint64_t phys_page2 = pmm_alloc_page();
     
-    KASSERT(vmm_map_page(test_virt, phys_page1, VMM_FLAG_WRITABLE) == true);
+    KASSERT(vmm_map_page(&kernel_process->as, test_virt, phys_page1, VMM_FLAG_WRITABLE) == true);
     
     // Second map should fail
-    KASSERT(vmm_map_page(test_virt, phys_page2, VMM_FLAG_WRITABLE) == false);
+    KASSERT(vmm_map_page(&kernel_process->as, test_virt, phys_page2, VMM_FLAG_WRITABLE) == false);
     
-    KASSERT(vmm_unmap_page(test_virt) == true);
+    KASSERT(vmm_unmap_page(&kernel_process->as, test_virt) == true);
     
     pmm_free_page(phys_page1);
     pmm_free_page(phys_page2);
@@ -351,13 +351,13 @@ static void test_vmm_007_008_accounting(void) {
     
     KASSERT(pmm_free_frames() == free_before - 1);
     
-    KASSERT(vmm_map_page(test_virt, phys_page, VMM_FLAG_WRITABLE) == true);
+    KASSERT(vmm_map_page(&kernel_process->as, test_virt, phys_page, VMM_FLAG_WRITABLE) == true);
     
     uint64_t free_after_map = pmm_free_frames();
     KASSERT(free_after_map == free_before - 1 - 3);
     serial_puts("[PASS] vmm_007_pt_alloc\n");
     
-    KASSERT(vmm_unmap_page(test_virt) == true);
+    KASSERT(vmm_unmap_page(&kernel_process->as, test_virt) == true);
     
     KASSERT(pmm_free_frames() == free_after_map);
     
@@ -930,6 +930,8 @@ void run_kernel_tests(void) {
     
     extern void test_user(void);
     test_user();
+    
+    test_process_suite();
     
     // Run this last because it permanently exhausts PMM frames (kfree doesn't return them to PMM)
     test_heap_009_exhaustion();
