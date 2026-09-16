@@ -933,6 +933,9 @@ void run_kernel_tests(void) {
     
     test_process_suite();
     
+    extern void test_elf(void);
+    test_elf();
+    
     // Run this last because it permanently exhausts PMM frames (kfree doesn't return them to PMM)
     test_heap_009_exhaustion();
     
