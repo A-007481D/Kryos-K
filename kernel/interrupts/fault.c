@@ -94,14 +94,12 @@ void fault_handler(kernel_interrupt_frame *frame) {
     // Check for real user process faults
     struct thread* curr = thread_current();
     if (curr && curr->process && curr->process != kernel_process) {
-        if ((frame->cs & 3) == 3 || (frame->int_no == 14 && (frame->err_code & 4)) || frame->int_no == 0x81) {
+        if ((frame->cs & 3) == 3 || (frame->int_no == 14 && (frame->err_code & 4))) {
             kprintf("\n--- USER PROCESS FAULT/EXIT ---\n");
-            kprintf("PID: %d, Vector: %d", curr->process->pid, frame->int_no);
-            if (frame->int_no == 0x81) kprintf(" (Test Exit %d)", frame->rdi);
-            kprintf("\n");
+            kprintf("PID: %d, Vector: %d\n", curr->process->pid, frame->int_no);
             
             process_terminate(curr->process);
-            schedule();
+            schedule_after_exit();
             return;
         }
     }

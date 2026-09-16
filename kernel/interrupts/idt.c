@@ -30,10 +30,9 @@ void idt_init(void) {
         idt_set_gate(i, isr_stub_table[i], 0x08, 0x8E);
     }
     
-    // 0x80 Syscall entry (software interrupt)
+    // 0x80 Syscall entry (software interrupt) - legacy test
     // 0xEE = Present (1) | DPL (11) | Storage (0) | Gate Type (1110)
     idt_set_gate(0x80, isr_stub_table[0x80], 0x08, 0xEE);
-    idt_set_gate(0x81, isr_stub_table[0x81], 0x08, 0xEE);
 
     // Load IDT
     __asm__ volatile ("lidt %0" : : "m"(idtr));
