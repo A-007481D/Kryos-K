@@ -21,5 +21,5 @@ extern struct process* kernel_process;
 void process_init(void);
 struct process* process_create(void);
 void process_destroy(struct process* proc);
-
+void process_terminate(struct process* proc);
 #endif // KRYOS_PROCESS_H

@@ -41,6 +41,19 @@ struct thread* thread_current(void) {
     return current;
 }
 
+extern void jump_to_usermode(uint64_t rip, uint64_t rsp);
+
+static void __attribute__((naked)) user_thread_start_wrapper(void) {
+    __asm__ volatile(
+        "sti\n"
+        "mov %%r13, %%rdi\n"
+        "mov %%r14, %%rsi\n"
+        "call *%%r12\n"
+        "call thread_exit\n"
+        : : : "memory"
+    );
+}
+
 static void __attribute__((naked)) thread_start_wrapper(void) {
     __asm__ volatile(
         "sti\n"
@@ -101,6 +114,52 @@ struct thread* thread_create(void (*entry_point)(void)) {
     return thread_create_process(entry_point, kernel_process);
 }
 
+struct thread* thread_create_user(struct process* process, uint64_t rip, uint64_t rsp) {
+    struct thread* t = kmalloc(sizeof(struct thread));
+    KASSERT(t != NULL);
+    
+    t->id = next_tid++;
+    t->kernel_stack_size = STACK_SIZE;
+    t->kernel_stack_base = kmalloc(t->kernel_stack_size);
+    KASSERT(t->kernel_stack_base != NULL);
+    
+    t->user_stack_size = 0;
+    t->user_stack_base = NULL;
+    
+    uint64_t* stack_top = (uint64_t*)((uint8_t*)t->kernel_stack_base + t->kernel_stack_size);
+    
+    uintptr_t top = (uintptr_t)stack_top;
+    top &= ~0xFULL;
+    stack_top = (uint64_t*)top;
+    
+    *(--stack_top) = 0; // Alignment pad
+    *(--stack_top) = (uint64_t)thread_exit; // Fake return address
+    *(--stack_top) = (uint64_t)user_thread_start_wrapper; // Entry point
+    
+    // Pushed in same order as context_switch (rbp first, r15 last)
+    *(--stack_top) = 0; // rbp
+    *(--stack_top) = 0; // rbx
+    *(--stack_top) = (uint64_t)jump_to_usermode; // r12 (called by wrapper)
+    *(--stack_top) = rip; // r13 (moved to rdi)
+    *(--stack_top) = rsp; // r14 (moved to rsi)
+    *(--stack_top) = 0; // r15
+    
+    t->rsp = (uint64_t)stack_top;
+    t->state = THREAD_READY;
+    t->process = process;
+    
+    irq_state_t flags = irq_save();
+    struct thread* tail = head;
+    while (tail->next != head) {
+        tail = tail->next;
+    }
+    tail->next = t;
+    t->next = head;
+    irq_restore(flags);
+    
+    return t;
+}
+
 static void reap_dead_threads(void) {
     if (!head) return;
     
@@ -129,6 +188,9 @@ static void reap_dead_threads(void) {
             if (curr->user_stack_base) {
                 kfree(curr->user_stack_base);
             }
+            // NOTE: process lifecycle is NOT owned by the thread reaper.
+            // process_terminate() is responsible for calling process_destroy()
+            // after all threads are confirmed dead.
             kfree(curr);
             
             if (curr == next_node) {
@@ -144,7 +206,7 @@ static void reap_dead_threads(void) {
     }
 }
 
-static void schedule(void) {
+void schedule(void) {
     if (in_scheduler) return;
     in_scheduler = true;
 
@@ -214,4 +276,16 @@ void thread_exit(void) {
     
     KASSERT(false && "thread_exit returned!");
     while(1);
+}
+
+void thread_terminate_process(struct process *proc) {
+    if (!head || !proc) return;
+    struct thread* start = head;
+    struct thread* curr = start;
+    do {
+        if (curr->process == proc) {
+            curr->state = THREAD_DEAD;
+        }
+        curr = curr->next;
+    } while (curr != start);
 }

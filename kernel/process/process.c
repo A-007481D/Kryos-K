@@ -3,6 +3,7 @@
 #include "../../include/heap.h"
 #include "../memory/virt.h"
 #include "../../include/pmm.h"
+#include "../../include/thread.h"
 #include <stddef.h>
 
 static struct process _kernel_process = {0};
@@ -30,11 +31,22 @@ struct process* process_create(void) {
 }
 
 void process_destroy(struct process* proc) {
-    if (!proc) return;
-    if (proc == kernel_process) return; // Cannot destroy the kernel process
+    if (!proc || proc == kernel_process) return;
     
-    // Destroy the address space (user mappings and page tables)
     vmm_destroy_address_space(&proc->as);
-    
     kfree(proc);
+}
+
+void process_terminate(struct process* proc) {
+    if (!proc || proc == kernel_process) return;
+    
+    // Mark all threads belonging to this process as dead.
+    // The thread reaper will free the thread structs on the next schedule().
+    thread_terminate_process(proc);
+    
+    // Destroy the address space immediately.
+    // Invariant: the currently executing thread must not be using this address space.
+    // This is guaranteed because process_terminate is only called from the fault handler
+    // when the faulting thread's process needs to be killed (we will schedule() away after).
+    process_destroy(proc);
 }

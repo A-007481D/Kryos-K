@@ -36,12 +36,15 @@ struct thread* thread_create(void (*entry_point)(void));
 
 // Creates a new thread attached to a specific process
 struct thread* thread_create_process(void (*entry_point)(void), struct process* process);
+struct thread* thread_create_user(struct process* process, uint64_t rip, uint64_t rsp);
 
 // Yields the CPU to the next READY thread in the round-robin list
 void thread_yield(void);
+void schedule(void);
 
 // Exits the current thread and yields to another. Never returns.
 void thread_exit(void);
+void thread_terminate_process(struct process *proc);
 
 // Gets the currently running thread
 struct thread* thread_current(void);
