@@ -915,7 +915,6 @@ void run_kernel_tests(void) {
     test_heap_006_double_free();
     test_heap_007_invalid_ptr();
     test_heap_008_unaligned_ptr();
-    test_heap_009_exhaustion();
     test_heap_010_verify();
     test_heap_011_corruption();
     test_heap_012_randomized();
@@ -928,6 +927,13 @@ void run_kernel_tests(void) {
     test_thread_010_011();
     
     test_preempt();
+    
+    extern void test_user(void);
+    test_user();
+    
+    // Run this last because it permanently exhausts PMM frames (kfree doesn't return them to PMM)
+    test_heap_009_exhaustion();
+    
     
     test_panic();
 }

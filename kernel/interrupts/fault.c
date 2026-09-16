@@ -31,6 +31,7 @@ void fault_handler(kernel_interrupt_frame *frame) {
 
     if (current_test_context.active) {
         if (frame->int_no != current_test_context.expected_vector) {
+            current_test_context.active = false;
             panic(__FILE__, __LINE__, 
                 "Test failed: Expected exception %d, but got %d (%s)", 
                 current_test_context.expected_vector, 
@@ -40,21 +41,44 @@ void fault_handler(kernel_interrupt_frame *frame) {
         
         if (frame->int_no == 14) {
             if (cr2 != current_test_context.expected_cr2) {
+                current_test_context.active = false;
                 panic(__FILE__, __LINE__, 
                     "Test failed: Expected CR2 0x%p, but got 0x%p", 
                     current_test_context.expected_cr2, cr2);
             }
         }
         
-        // Recover execution
-        frame->rip = current_test_context.recovery_rip;
+        if (frame->int_no == 128) {
+            // USER-008: Verify RSP0 lands on the exact expected offset
+            // We know the kernel stack is currently at thread_current()->kernel_stack_base + kernel_stack_size.
+            // The interrupt frame size is 22 * 8 bytes (since we added rsp and ss to kernel_interrupt_frame).
+            struct thread* t = thread_current();
+            if (t != NULL && t->kernel_stack_base != NULL) {
+                uint64_t expected_rsp = (uint64_t)t->kernel_stack_base + t->kernel_stack_size - sizeof(kernel_interrupt_frame);
+                if ((uint64_t)frame != expected_rsp) {
+                    current_test_context.active = false;
+                    panic(__FILE__, __LINE__, "USER-008 failed: Expected RSP 0x%p, got 0x%p", expected_rsp, frame);
+                }
+            }
+            
+            // USER-009: Verify CPL3 Sanity
+            if (current_test_context.test_id == 9) {
+                if ((frame->rax & 3) != 3) {
+                    current_test_context.active = false;
+                    panic(__FILE__, __LINE__, "USER-009 failed: User CS was 0x%x, expected RPL=3", frame->rax);
+                }
+            }
+        }
         
-        // Although the user's conceptual kernel_interrupt_frame ends at RFLAGS,
-        // x86-64 long mode unconditionally pushes RSP and SS for all interrupts.
+        // Recover execution
+        // Recover execution to the kernel test function
+        frame->rip = current_test_context.recovery_rip;
+        frame->cs = 0x08; // K-Code
+        
         // We must modify the pushed RSP so iretq restores the stack to the recovery point,
         // preventing a stack leak from the nested panic() call.
-        uint64_t* hardware_rsp_slot = (uint64_t*)((uint8_t*)frame + sizeof(kernel_interrupt_frame));
-        *hardware_rsp_slot = current_test_context.recovery_rsp;
+        frame->rsp = current_test_context.recovery_rsp;
+        frame->ss = 0x10; // K-Data
         
         frame->rbp = current_test_context.recovery_rbp;
         frame->rbx = current_test_context.recovery_rbx;
