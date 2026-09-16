@@ -2,6 +2,7 @@
 #include "../../include/pmm.h"
 #include "virt.h"
 #include <stddef.h>
+#include <serial.h>
 
 // Hardware PTE flags
 #define PTE_PRESENT       (1ULL << 0)
@@ -50,6 +51,7 @@ static uint64_t* get_next_level(uint64_t* current_table, uint64_t index, bool al
     if (entry & PTE_PRESENT) {
         // Must reject if we hit a huge page when we expect a directory
         if (entry & PDE_PS) {
+            serial_puts("get_next_level: hit PS bit!\n");
             return NULL;
         }
         
@@ -67,7 +69,10 @@ static uint64_t* get_next_level(uint64_t* current_table, uint64_t index, bool al
     if (!allocate) return NULL;
     
     uint64_t next_table_phys = pmm_alloc_page();
-    if (next_table_phys == 0) return NULL; // OOM
+    if (next_table_phys == 0) {
+        serial_puts("get_next_level: OOM\n");
+        return NULL; // OOM
+    }
     
     uint64_t* next_table_virt = (uint64_t*)phys_to_virt(next_table_phys);
     for (int i = 0; i < 512; i++) {
@@ -84,22 +89,22 @@ static uint64_t* get_next_level(uint64_t* current_table, uint64_t index, bool al
 }
 
 bool vmm_map_page(uint64_t virt_addr, uint64_t phys_addr, uint32_t flags) {
-    if (!is_canonical(virt_addr)) return false;
-    if (virt_addr % PMM_PAGE_SIZE != 0 || phys_addr % PMM_PAGE_SIZE != 0) return false;
+    if (!is_canonical(virt_addr)) { serial_puts("vmm_map_page: not canonical\n"); return false; }
+    if (virt_addr % PMM_PAGE_SIZE != 0 || phys_addr % PMM_PAGE_SIZE != 0) { serial_puts("vmm_map_page: alignment\n"); return false; }
     
     uint64_t arch_flags = flags_to_pte(flags);
     
     uint64_t* pdpt = get_next_level(pml4_table, pml4_index(virt_addr), true, arch_flags);
-    if (!pdpt) return false; // OOM or huge page conflict
+    if (!pdpt) { serial_puts("vmm_map_page: pdpt failed\n"); return false; }
     
     uint64_t* pd = get_next_level(pdpt, pdpt_index(virt_addr), true, arch_flags);
-    if (!pd) return false;
+    if (!pd) { serial_puts("vmm_map_page: pd failed\n"); return false; }
     
     uint64_t* pt = get_next_level(pd, pd_index(virt_addr), true, arch_flags);
-    if (!pt) return false; // Here we specifically reject if PD has a huge page
+    if (!pt) { serial_puts("vmm_map_page: pt failed\n"); return false; }
     
     uint64_t pt_idx = pt_index(virt_addr);
-    if (pt[pt_idx] & PTE_PRESENT) return false; // Reject double mapping
+    if (pt[pt_idx] & PTE_PRESENT) { serial_puts("vmm_map_page: double map\n"); return false; }
     
     pt[pt_idx] = phys_addr | arch_flags | PTE_PRESENT;
     invlpg(virt_addr);
