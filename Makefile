@@ -53,15 +53,13 @@ OBJS = \
 
 .PHONY: all clean iso run debug test
 
-USER_INIT = $(BUILD_DIR)/user/init.elf
-USER_TEST_TARGET = $(BUILD_DIR)/user/test_target.elf
-USER_TEST_SPAWN = $(BUILD_DIR)/user/test_spawn.elf
-USER_TEST_EXEC = $(BUILD_DIR)/user/test_exec.elf
-USER_TEST_ROLLBACK = $(BUILD_DIR)/user/test_rollback.elf
+USER_INIT = $(BUILD_DIR)/user/bin/init.elf
+USER_HELLO = $(BUILD_DIR)/user/bin/hello.elf
+USER_TEST_EXEC = $(BUILD_DIR)/user/bin/test_exec.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_TEST_TARGET) $(USER_TEST_SPAWN) $(USER_TEST_EXEC) $(USER_TEST_ROLLBACK)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC)
 
 all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
 
@@ -80,12 +78,23 @@ $(BUILD_DIR)/%.o: %.S
 $(KERNEL_ELF): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
-$(BUILD_DIR)/user/%.elf: user/%.c user/syscall.h
+USER_LIBKRYOS_OBJS = \
+    $(BUILD_DIR)/user/libkryos/startup.o \
+    $(BUILD_DIR)/user/libkryos/syscall.o \
+    $(BUILD_DIR)/user/libkryos/process.o \
+    $(BUILD_DIR)/user/libkryos/io.o \
+    $(BUILD_DIR)/user/libkryos/string.o
+
+$(BUILD_DIR)/user/libkryos.a: $(USER_LIBKRYOS_OBJS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,-Ttext=0x400000 $< -o $@
+	ar rcs $@ $(USER_LIBKRYOS_OBJS)
+
+$(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user init.elf test_target.elf test_spawn.elf test_exec.elf test_rollback.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf
 
 iso: $(KERNEL_ISO)
 
