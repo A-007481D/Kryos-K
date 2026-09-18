@@ -9,6 +9,9 @@
 #include "../../include/elf.h"
 #include "../../include/tarfs.h"
 #include "../../include/stdio.h"
+#include "../../include/pmm.h"
+#include "../../kernel/memory/virt.h"
+#include <string.h>
 #include <stddef.h>
 
 extern void syscall_entry(void);
@@ -342,6 +345,9 @@ static uint64_t sys_spawn(const char *path, const char *argv[], const char *envp
         return (uint64_t)-ENOMEM;
     }
     
+    child->brk_start = 0x10000000;
+    child->brk_current = 0x10000000;
+    
     return child->pid;
 }
 
@@ -435,6 +441,9 @@ static uint64_t sys_execve(const char *path, const char *argv[], const char *env
     vmm_destroy_address_space(&proc->as);
     proc->as = new_as;
     
+    proc->brk_start = 0x10000000;
+    proc->brk_current = 0x10000000;
+    
     // Setup trap frame to return to the new entry point
     frame->rcx = out_entry;
     frame->rsp = out_rsp;
@@ -445,6 +454,46 @@ static uint64_t sys_execve(const char *path, const char *argv[], const char *env
     __asm__ volatile ("mov %0, %%cr3" :: "r"(next_cr3) : "memory");
     
     return 0; // Return value doesn't matter for execve on success, but 0 is conventional.
+}
+
+static uint64_t sys_brk(uint64_t new_brk) {
+    struct process *proc = thread_current()->process;
+    if (!new_brk) return proc->brk_current;
+    
+    if (new_brk < proc->brk_start) return proc->brk_current;
+    
+    // Page alignment macro if not defined, PMM_PAGE_SIZE is 0x1000
+    #define PAGE_ALIGN_UP(x) (((x) + 0xFFF) & ~0xFFFULL)
+    
+    if (new_brk > proc->brk_current) {
+        uint64_t start_page = PAGE_ALIGN_UP(proc->brk_current);
+        uint64_t end_page = PAGE_ALIGN_UP(new_brk);
+        for (uint64_t va = start_page; va < end_page; va += 0x1000) {
+            uint64_t phys = pmm_alloc_page();
+            if (!phys) {
+                // Rollback is omitted for simplicity; return current
+                return proc->brk_current;
+            }
+            if (!vmm_map_page(&proc->as, va, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE | VMM_FLAG_NO_EXECUTE)) {
+                pmm_free_page(phys);
+                return proc->brk_current;
+            }
+            memset(phys_to_virt(phys), 0, 0x1000);
+        }
+    } else if (new_brk < proc->brk_current) {
+        uint64_t start_page = PAGE_ALIGN_UP(new_brk);
+        uint64_t end_page = PAGE_ALIGN_UP(proc->brk_current);
+        for (uint64_t va = start_page; va < end_page; va += 0x1000) {
+            uint64_t phys = 0;
+            if (vmm_get_phys(&proc->as, va, &phys)) {
+                vmm_unmap_page(&proc->as, va);
+                pmm_free_page(phys);
+            }
+        }
+    }
+    
+    proc->brk_current = new_brk;
+    return new_brk;
 }
 
 uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, struct syscall_frame *frame) {
@@ -468,6 +517,8 @@ uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, st
             return sys_spawn((const char*)a0, (const char**)a1, (const char**)a2);
         case 8:
             return sys_execve((const char*)a0, (const char**)a1, (const char**)a2, frame);
+        case 9:
+            return sys_brk(a0);
         default:
             return (uint64_t)-ENOSYS;
     }

@@ -33,6 +33,9 @@ struct process {
     
     int exit_status;
     struct thread *waiter;
+    
+    uint64_t brk_start;
+    uint64_t brk_current;
 };
 
 // Global reference to the kernel process (PID 0)

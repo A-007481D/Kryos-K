@@ -12,6 +12,7 @@
 #define SYS_WAITPID 6
 #define SYS_SPAWN   7
 #define SYS_EXECVE  8
+#define SYS_BRK     9
 
 typedef int64_t pid_t;
 typedef int64_t ssize_t;
@@ -28,6 +29,11 @@ int open(const char *path, int flags);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
+
+/* Memory API */
+void *sbrk(intptr_t increment);
+void *malloc(size_t size);
+void free(void *ptr);
 
 /* String API */
 size_t strlen(const char *s);

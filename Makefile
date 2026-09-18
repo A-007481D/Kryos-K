@@ -56,10 +56,11 @@ OBJS = \
 USER_INIT = $(BUILD_DIR)/user/bin/init.elf
 USER_HELLO = $(BUILD_DIR)/user/bin/hello.elf
 USER_TEST_EXEC = $(BUILD_DIR)/user/bin/test_exec.elf
+USER_TEST_ALLOC = $(BUILD_DIR)/user/bin/test_alloc.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC)
 
 all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
 
@@ -83,7 +84,8 @@ USER_LIBKRYOS_OBJS = \
     $(BUILD_DIR)/user/libkryos/syscall.o \
     $(BUILD_DIR)/user/libkryos/process.o \
     $(BUILD_DIR)/user/libkryos/io.o \
-    $(BUILD_DIR)/user/libkryos/string.o
+    $(BUILD_DIR)/user/libkryos/string.o \
+    $(BUILD_DIR)/user/libkryos/alloc.o
 
 $(BUILD_DIR)/user/libkryos.a: $(USER_LIBKRYOS_OBJS)
 	@mkdir -p $(dir $@)
@@ -94,7 +96,7 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf
 
 iso: $(KERNEL_ISO)
 

@@ -122,7 +122,12 @@ EXPECTED_TESTS = [
     "RUNTIME-006",
     "RUNTIME-007",
     "RUNTIME-008",
-    "RUNTIME-009"
+    "RUNTIME-009",
+    "RUNTIME-010",
+    "RUNTIME-011",
+    "RUNTIME-012",
+    "RUNTIME-013",
+    "RUNTIME-014"
 ]
 
 def main():

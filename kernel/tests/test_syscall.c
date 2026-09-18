@@ -170,4 +170,31 @@ void test_syscall_suite(void) {
     // Now just emit PROC-019 manually or use TEST_BEGIN/END
     TEST_BEGIN("PROC-019");
     TEST_END();
+    
+    // Phase 16: Test libkryos allocator and sys_brk
+    serial_puts("Running Phase 16 allocator tests...\n");
+    int64_t alloc_pid = launch_user_test("test_alloc.elf");
+    TEST_ASSERT(alloc_pid > 0);
+    if (alloc_pid > 0) {
+        int alloc_status = -1;
+        uint64_t phys = pmm_alloc_page();
+        vmm_map_page(&thread_current()->process->as, 0x5002000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+        int *u_alloc_status = (int*)0x5002000;
+        *u_alloc_status = -1;
+        
+        int64_t ret = (int64_t)syscall_dispatch(6, alloc_pid, (uint64_t)u_alloc_status, 0, NULL);
+        TEST_ASSERT(ret == alloc_pid);
+        
+        if (ret == alloc_pid) {
+            alloc_status = *u_alloc_status;
+            TEST_ASSERT(alloc_status == 0); // test_alloc returns 0 on success
+            if (alloc_status == 0) {
+                serial_puts("test_alloc.elf passed all tests.\n");
+            } else {
+                kprintf("test_alloc.elf failed! exit code: %d\n", alloc_status);
+            }
+        }
+        vmm_unmap_page(&thread_current()->process->as, 0x5002000);
+        pmm_free_page(phys);
+    }
 }
