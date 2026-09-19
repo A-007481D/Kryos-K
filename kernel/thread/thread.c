@@ -191,6 +191,22 @@ static void reap_dead_threads(void) {
             if (curr->user_stack_base) {
                 kfree(curr->user_stack_base);
             }
+            
+            // Clean up from tty_wait_queue if it was blocked there
+            extern struct thread *tty_wait_queue;
+            if (tty_wait_queue == curr) {
+                tty_wait_queue = curr->next_waiter;
+            } else {
+                struct thread *tw = tty_wait_queue;
+                while (tw && tw->next_waiter) {
+                    if (tw->next_waiter == curr) {
+                        tw->next_waiter = curr->next_waiter;
+                        break;
+                    }
+                    tw = tw->next_waiter;
+                }
+            }
+            
             kfree(curr);
             
             if (curr == next_node) {
@@ -270,11 +286,13 @@ void schedule(void) {
     }
 }
 
+bool preemption_enabled = false;
+
 void timer_handler(void) {
     scheduler_ticks++;
-    pic_eoi(0);
-    
-    schedule();
+    if (preemption_enabled) {
+        schedule();
+    }
 }
 
 void thread_yield(void) {

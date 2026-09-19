@@ -27,6 +27,7 @@ struct thread {
 
     thread_state_t state;
     struct thread *next;
+    struct thread *next_waiter;
 };
 
 // Initializes the threading subsystem (creates a 'main' thread to represent the boot context).
