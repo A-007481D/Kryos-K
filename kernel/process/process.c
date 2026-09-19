@@ -24,7 +24,8 @@ void process_init(void) {
     
     struct file *stdin_file = kmalloc(sizeof(struct file));
     if (stdin_file) {
-        stdin_file->vnode = &tty_vnode;
+        extern struct vnode* tty_get_vnode(int);
+        stdin_file->vnode = tty_get_vnode(0);
         stdin_file->offset = 0;
         stdin_file->flags = 0;
         stdin_file->private_data = NULL;
@@ -33,7 +34,8 @@ void process_init(void) {
     
     struct file *con1 = kmalloc(sizeof(struct file));
     if (con1) {
-        con1->vnode = console_get_vnode();
+        extern struct vnode* tty_get_vnode(int);
+        con1->vnode = tty_get_vnode(0);
         con1->offset = 0;
         con1->flags = 0;
         con1->private_data = NULL;
@@ -42,7 +44,8 @@ void process_init(void) {
     
     struct file *con2 = kmalloc(sizeof(struct file));
     if (con2) {
-        con2->vnode = console_get_vnode();
+        extern struct vnode* tty_get_vnode(int);
+        con2->vnode = tty_get_vnode(0);
         con2->offset = 0;
         con2->flags = 0;
         con2->private_data = NULL;
@@ -61,22 +64,34 @@ struct process* process_create(void) {
         proc->fd_table[i] = NULL;
     }
     
-    struct file *con1 = kmalloc(sizeof(struct file));
-    if (con1) {
-        con1->vnode = console_get_vnode();
-        con1->offset = 0;
-        con1->flags = 0;
-        con1->private_data = NULL;
-        proc->fd_table[1] = con1;
+    struct file *tty_in = kmalloc(sizeof(struct file));
+    if (tty_in) {
+        extern struct vnode* tty_get_vnode(int);
+        tty_in->vnode = tty_get_vnode(0);
+        tty_in->offset = 0;
+        tty_in->flags = 0;
+        tty_in->private_data = NULL;
+        proc->fd_table[0] = tty_in;
     }
     
-    struct file *con2 = kmalloc(sizeof(struct file));
-    if (con2) {
-        con2->vnode = console_get_vnode();
-        con2->offset = 0;
-        con2->flags = 0;
-        con2->private_data = NULL;
-        proc->fd_table[2] = con2;
+    struct file *tty_out = kmalloc(sizeof(struct file));
+    if (tty_out) {
+        extern struct vnode* tty_get_vnode(int);
+        tty_out->vnode = tty_get_vnode(0);
+        tty_out->offset = 0;
+        tty_out->flags = 0;
+        tty_out->private_data = NULL;
+        proc->fd_table[1] = tty_out;
+    }
+    
+    struct file *tty_err = kmalloc(sizeof(struct file));
+    if (tty_err) {
+        extern struct vnode* tty_get_vnode(int);
+        tty_err->vnode = tty_get_vnode(0);
+        tty_err->offset = 0;
+        tty_err->flags = 0;
+        tty_err->private_data = NULL;
+        proc->fd_table[2] = tty_err;
     }
     proc->parent = thread_current() ? thread_current()->process : kernel_process;
     proc->children_head = NULL;

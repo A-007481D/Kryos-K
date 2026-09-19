@@ -193,19 +193,8 @@ static void reap_dead_threads(void) {
             }
             
             // Clean up from tty_wait_queue if it was blocked there
-            extern struct thread *tty_wait_queue;
-            if (tty_wait_queue == curr) {
-                tty_wait_queue = curr->next_waiter;
-            } else {
-                struct thread *tw = tty_wait_queue;
-                while (tw && tw->next_waiter) {
-                    if (tw->next_waiter == curr) {
-                        tw->next_waiter = curr->next_waiter;
-                        break;
-                    }
-                    tw = tw->next_waiter;
-                }
-            }
+            extern void tty_remove_waiter(struct thread *t);
+            tty_remove_waiter(curr);
             
             kfree(curr);
             
