@@ -820,6 +820,8 @@ static void preempt_012_thread_b(void) {
 
 static void test_preempt(void) {
     // 001, 002, 003
+    extern bool preemption_enabled;
+    preemption_enabled = true;
     __asm__ volatile("sti");
     uint64_t ticks_before = scheduler_ticks;
     while (scheduler_ticks < ticks_before + 5) {

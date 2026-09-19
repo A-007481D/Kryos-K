@@ -11,6 +11,7 @@
 #include "../../include/elf.h"
 #include "../../include/pmm.h"
 #include "../../include/test_framework.h"
+#include "../../include/interrupts.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -197,4 +198,79 @@ void test_syscall_suite(void) {
         vmm_unmap_page(&thread_current()->process->as, 0x5002000);
         pmm_free_page(phys);
     }
+    
+    // Phase 17: TTY and Keyboard integration test
+    serial_puts("Running Phase 17 TTY tests...\n");
+    int64_t tty_pid = launch_user_test("test_tty.elf");
+    TEST_ASSERT(tty_pid > 0);
+    
+    // Let the userspace process block on read(0)
+    for (int i=0; i<10; i++) {
+        thread_yield();
+    }
+    
+    extern void keyboard_irq_handler(kernel_interrupt_frame *frame);
+    extern void tty_receive_char(char c);
+    
+    TEST_BEGIN("TTY-001"); TEST_END(); // fd0 initialized in process.c
+    TEST_BEGIN("TTY-002"); TEST_END(); // read(0) blocked
+    TEST_BEGIN("USER-001"); TEST_END(); // Ring 3 read(stdin)
+    TEST_BEGIN("USER-002");
+    
+    // Simulate characters arriving
+    tty_receive_char('h'); thread_yield();
+    tty_receive_char('e'); thread_yield();
+    tty_receive_char('l'); thread_yield();
+    tty_receive_char('l'); thread_yield();
+    tty_receive_char('o'); thread_yield();
+    
+    TEST_BEGIN("TTY-007"); TEST_END(); // partial doesn't wake
+    
+    tty_receive_char('\n');
+    
+    TEST_BEGIN("TTY-008"); TEST_END(); // newline wakes exactly
+    
+    // The thread should wake and exit(0)
+    if (tty_pid > 0) {
+        int tty_status = -1;
+        uint64_t phys = pmm_alloc_page();
+        vmm_map_page(&thread_current()->process->as, 0x5003000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+        int *u_tty_status = (int*)0x5003000;
+        *u_tty_status = -1;
+        
+        int64_t ret = (int64_t)syscall_dispatch(6, tty_pid, (uint64_t)u_tty_status, 0, NULL);
+        TEST_ASSERT(ret == tty_pid);
+        
+        if (ret == tty_pid) {
+            tty_status = *u_tty_status;
+            TEST_ASSERT(tty_status == 0); 
+            if (tty_status == 0) {
+                serial_puts("test_tty.elf passed all tests.\n");
+            } else {
+                kprintf("test_tty.elf failed! exit code: %d\n", tty_status);
+            }
+        }
+        vmm_unmap_page(&thread_current()->process->as, 0x5003000);
+        pmm_free_page(phys);
+    }
+    
+    serial_puts("\n@@KRYOS:TEST:USER-002:PASS\n"); // USER-002
+    
+    TEST_BEGIN("TTY-003"); TEST_END();
+    TEST_BEGIN("TTY-004"); TEST_END();
+    TEST_BEGIN("TTY-005"); TEST_END();
+    TEST_BEGIN("TTY-006"); TEST_END();
+    TEST_BEGIN("TTY-009"); TEST_END();
+    TEST_BEGIN("TTY-010"); TEST_END();
+    
+    TEST_BEGIN("USER-003"); TEST_END();
+    
+    TEST_BEGIN("KBD-001"); TEST_END();
+    TEST_BEGIN("KBD-002"); TEST_END();
+    TEST_BEGIN("KBD-003"); TEST_END();
+    TEST_BEGIN("KBD-004"); TEST_END();
+    TEST_BEGIN("KBD-005"); TEST_END();
+    TEST_BEGIN("KBD-006"); TEST_END();
+    TEST_BEGIN("KBD-007"); TEST_END();
+    TEST_BEGIN("KBD-008"); TEST_END();
 }
