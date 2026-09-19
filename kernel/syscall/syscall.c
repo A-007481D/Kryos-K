@@ -153,6 +153,36 @@ static uint64_t sys_close(uint64_t fd) {
     return err;
 }
 
+static uint64_t sys_getdents(uint64_t fd, struct dirent *dirp, size_t count) {
+    struct process *proc = thread_current()->process;
+    if (fd >= MAX_FDS || !proc->fd_table[fd]) {
+        return (uint64_t)-EBADF;
+    }
+    
+    if (count > 4096) count = 4096;
+    
+    if (!user_range_writable(dirp, count)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    void *kbuf = kmalloc(count);
+    if (!kbuf) return (uint64_t)-ENOMEM;
+    
+    int err = vfs_getdents(proc->fd_table[fd], (struct dirent *)kbuf, count);
+    
+    if (err > 0) {
+        // Copy out the populated dirent structure
+        for (size_t i = 0; i < (size_t)err; i++) {
+            ((char*)dirp)[i] = ((const char*)kbuf)[i];
+        }
+    }
+    
+    kfree(kbuf);
+    
+    if (err < 0) return (uint64_t)err;
+    return (uint64_t)err;
+}
+
 _Noreturn static void sys_exit(uint64_t code) {
     process_exit(thread_current()->process, (int)code);
     schedule_after_exit();
@@ -345,6 +375,12 @@ static uint64_t sys_spawn(const char *path, const char *argv[], const char *envp
         return (uint64_t)-ENOMEM;
     }
     
+    // Copy file descriptors from parent
+    struct process *parent = thread_current()->process;
+    for (int i = 0; i < MAX_FDS; i++) {
+        child->fd_table[i] = parent->fd_table[i];
+    }
+    
     child->brk_start = 0x10000000;
     child->brk_current = 0x10000000;
     
@@ -519,6 +555,8 @@ uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, st
             return sys_execve((const char*)a0, (const char**)a1, (const char**)a2, frame);
         case 9:
             return sys_brk(a0);
+        case 10:
+            return sys_getdents(a0, (struct dirent*)a1, a2);
         default:
             return (uint64_t)-ENOSYS;
     }
