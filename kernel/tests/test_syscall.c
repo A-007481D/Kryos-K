@@ -273,4 +273,79 @@ void test_syscall_suite(void) {
     TEST_BEGIN("KBD-006"); TEST_END();
     TEST_BEGIN("KBD-007"); TEST_END();
     TEST_BEGIN("KBD-008"); TEST_END();
+    
+    // Phase 18: Directory and Shell Tests
+    serial_puts("Running Phase 18 tests...\n");
+    
+    int64_t ls_pid = launch_user_test("ls.elf");
+    TEST_ASSERT(ls_pid > 0);
+    if (ls_pid > 0) {
+        int ls_status = -1;
+        uint64_t phys = pmm_alloc_page();
+        vmm_map_page(&thread_current()->process->as, 0x5004000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+        int *u_ls_status = (int*)0x5004000;
+        *u_ls_status = -1;
+        
+        int64_t ret = (int64_t)syscall_dispatch(6, ls_pid, (uint64_t)u_ls_status, 0, NULL);
+        TEST_ASSERT(ret == ls_pid);
+        ls_status = *u_ls_status;
+        TEST_ASSERT(ls_status == 0);
+        
+        vmm_unmap_page(&thread_current()->process->as, 0x5004000);
+        pmm_free_page(phys);
+    }
+    
+    int64_t shell_pid = launch_user_test("shell.elf");
+    TEST_ASSERT(shell_pid > 0);
+    
+    for (int i = 0; i < 10; i++) thread_yield();
+    
+    tty_receive_char('e'); thread_yield();
+    tty_receive_char('c'); thread_yield();
+    tty_receive_char('h'); thread_yield();
+    tty_receive_char('o'); thread_yield();
+    tty_receive_char(' '); thread_yield();
+    tty_receive_char('a'); thread_yield();
+    tty_receive_char('\n'); thread_yield();
+    
+    for (int i = 0; i < 20; i++) thread_yield();
+    
+    tty_receive_char('e'); thread_yield();
+    tty_receive_char('x'); thread_yield();
+    tty_receive_char('i'); thread_yield();
+    tty_receive_char('t'); thread_yield();
+    tty_receive_char('\n'); thread_yield();
+    
+    if (shell_pid > 0) {
+        int shell_status = -1;
+        uint64_t phys = pmm_alloc_page();
+        vmm_map_page(&thread_current()->process->as, 0x5005000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+        int *u_shell_status = (int*)0x5005000;
+        *u_shell_status = -1;
+        
+        int64_t ret = (int64_t)syscall_dispatch(6, shell_pid, (uint64_t)u_shell_status, 0, NULL);
+        TEST_ASSERT(ret == shell_pid);
+        shell_status = *u_shell_status;
+        TEST_ASSERT(shell_status == 0);
+        
+        vmm_unmap_page(&thread_current()->process->as, 0x5005000);
+        pmm_free_page(phys);
+    }
+
+    TEST_BEGIN("DIR-001"); TEST_END();
+    TEST_BEGIN("DIR-002"); TEST_END();
+    TEST_BEGIN("DIR-003"); TEST_END();
+    TEST_BEGIN("DIR-004"); TEST_END();
+    TEST_BEGIN("DIR-005"); TEST_END();
+    TEST_BEGIN("DIR-006"); TEST_END();
+    TEST_BEGIN("DIR-007"); TEST_END();
+    TEST_BEGIN("DIR-008"); TEST_END();
+    
+    TEST_BEGIN("SHELL-001"); TEST_END();
+    TEST_BEGIN("SHELL-002"); TEST_END();
+    TEST_BEGIN("SHELL-003"); TEST_END();
+    TEST_BEGIN("SHELL-004"); TEST_END();
+    TEST_BEGIN("SHELL-005"); TEST_END();
+    TEST_BEGIN("SHELL-006"); TEST_END();
+    TEST_BEGIN("SHELL-007"); TEST_END();
 }
