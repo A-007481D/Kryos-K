@@ -6,6 +6,7 @@
 #include "../../include/thread.h"
 #include "../../include/vfs.h"
 #include "../../include/stdio.h"
+#include "../fs/tty.h"
 #include <stddef.h>
 
 static struct process _kernel_process = {0};
@@ -19,6 +20,15 @@ void process_init(void) {
     
     for (int i = 0; i < MAX_FDS; i++) {
         kernel_process->fd_table[i] = NULL;
+    }
+    
+    struct file *stdin_file = kmalloc(sizeof(struct file));
+    if (stdin_file) {
+        stdin_file->vnode = &tty_vnode;
+        stdin_file->offset = 0;
+        stdin_file->flags = 0;
+        stdin_file->private_data = NULL;
+        kernel_process->fd_table[0] = stdin_file;
     }
     
     struct file *con1 = kmalloc(sizeof(struct file));

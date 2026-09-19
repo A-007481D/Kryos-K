@@ -37,9 +37,12 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/fault.o \
     $(BUILD_DIR)/kernel/interrupts/pic.o \
     $(BUILD_DIR)/kernel/interrupts/pit.o \
+    $(BUILD_DIR)/kernel/interrupts/irq.o \
+    $(BUILD_DIR)/kernel/drivers/ps2.o \
     $(BUILD_DIR)/kernel/fs/vfs.o \
     $(BUILD_DIR)/kernel/fs/tarfs.o \
     $(BUILD_DIR)/kernel/fs/console.o \
+    $(BUILD_DIR)/kernel/fs/tty.o \
     $(BUILD_DIR)/kernel/syscall/syscall.o \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
@@ -57,10 +60,11 @@ USER_INIT = $(BUILD_DIR)/user/bin/init.elf
 USER_HELLO = $(BUILD_DIR)/user/bin/hello.elf
 USER_TEST_EXEC = $(BUILD_DIR)/user/bin/test_exec.elf
 USER_TEST_ALLOC = $(BUILD_DIR)/user/bin/test_alloc.elf
+USER_TEST_TTY = $(BUILD_DIR)/user/bin/test_tty.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY)
 
 all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
 
@@ -96,7 +100,7 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf
 
 iso: $(KERNEL_ISO)
 

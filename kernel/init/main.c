@@ -14,6 +14,8 @@
 #include "../../include/tarfs.h"
 #include "../../include/elf.h"
 #include "../../include/assert.h"
+#include "../fs/tty.h"
+#include "../drivers/ps2.h"
 #include "tests.h"
 
 void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
@@ -29,6 +31,13 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     thread_init();
 
     idt_init();
+    
+    // PS/2 Keyboard Init
+    ps2_init();
+    
+    // TTY Init
+    tty_init();
+
     pit_init();
     syscall_init();
 
