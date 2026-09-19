@@ -163,7 +163,11 @@ EXPECTED_TESTS = [
     "SHELL-004",
     "SHELL-005",
     "SHELL-006",
-    "SHELL-007"
+    "SHELL-007",
+    "VT-001",
+    "VT-002",
+    "VT-003",
+    "TTY-011"
 ]
 
 def main():
@@ -284,7 +288,7 @@ def main():
         
     missing = []
     for e in EXPECTED_TESTS:
-        if e.startswith("PROC-") or e.startswith("EXEC-") or e.startswith("RUNTIME-") or e.startswith("TTY-") or e.startswith("USER-") or e.startswith("KBD-") or e.startswith("DIR-") or e.startswith("SHELL-"):
+        if e.startswith("PROC-") or e.startswith("EXEC-") or e.startswith("RUNTIME-") or e.startswith("TTY-") or e.startswith("USER-") or e.startswith("KBD-") or e.startswith("DIR-") or e.startswith("SHELL-") or e.startswith("VT-"):
             if e not in passed_tests:
                 missing.append(e)
         else:

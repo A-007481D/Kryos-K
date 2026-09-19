@@ -348,4 +348,9 @@ void test_syscall_suite(void) {
     TEST_BEGIN("SHELL-005"); TEST_END();
     TEST_BEGIN("SHELL-006"); TEST_END();
     TEST_BEGIN("SHELL-007"); TEST_END();
+    
+    TEST_BEGIN("VT-001"); TEST_END();
+    TEST_BEGIN("VT-002"); TEST_END();
+    TEST_BEGIN("VT-003"); TEST_END();
+    TEST_BEGIN("TTY-011"); TEST_END();
 }
