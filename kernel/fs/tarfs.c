@@ -91,10 +91,37 @@ static int tarfs_lookup(struct vnode *vn, const char *name, struct vnode **out_v
     return -ENOENT;
 }
 
+static int tarfs_getdents(struct vnode *vn, struct file *f, struct dirent *dirp, size_t count) {
+    (void)vn;
+    if (!f || !dirp) return -EINVAL;
+    
+    if (count < sizeof(struct dirent)) return -EINVAL;
+    
+    if (f->offset >= (uint64_t)tarfs_file_count) {
+        return 0; // EOF
+    }
+    
+    struct tarfs_file *tfile = &tarfs_files[f->offset];
+    
+    dirp->ino = f->offset + 1; // Fake inode
+    dirp->type = (tfile->type == VNODE_TYPE_DIR) ? DT_DIR : DT_REG;
+    dirp->reclen = sizeof(struct dirent);
+    
+    size_t i;
+    for (i = 0; i < sizeof(dirp->name) - 1 && tfile->name[i]; i++) {
+        dirp->name[i] = tfile->name[i];
+    }
+    dirp->name[i] = '\0';
+    
+    f->offset++;
+    return sizeof(struct dirent);
+}
+
 static vnode_ops_t tarfs_root_ops = {
     .read = NULL,
     .write = NULL,
     .lookup = tarfs_lookup,
+    .getdents = tarfs_getdents,
     .close = NULL
 };
 
