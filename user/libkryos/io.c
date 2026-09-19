@@ -15,3 +15,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 int close(int fd) {
     return (int)__syscall(SYS_CLOSE, (uint64_t)fd, 0, 0, 0, 0, 0);
 }
+
+int getdents(int fd, struct dirent *dirp, size_t count) {
+    return (int)__syscall(SYS_GETDENTS, (uint64_t)fd, (uint64_t)dirp, (uint64_t)count, 0, 0, 0);
+}

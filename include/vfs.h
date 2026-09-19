@@ -7,10 +7,21 @@
 struct vnode;
 struct file;
 
+#define DT_REG 1
+#define DT_DIR 2
+
+struct dirent {
+    uint64_t ino;
+    uint64_t type;
+    uint64_t reclen;
+    char name[256];
+};
+
 typedef struct vnode_ops {
     int (*read)(struct vnode *vn, struct file *f, void *buf, size_t count, size_t *bytes_read);
     int (*write)(struct vnode *vn, struct file *f, const void *buf, size_t count, size_t *bytes_written);
     int (*lookup)(struct vnode *vn, const char *name, struct vnode **out_vn);
+    int (*getdents)(struct vnode *vn, struct file *f, struct dirent *dirp, size_t count);
     void (*close)(struct vnode *vn, struct file *f);
 } vnode_ops_t;
 
@@ -46,6 +57,7 @@ int vfs_open(const char *path, uint64_t flags, struct file **out_file);
 int vfs_read(struct file *f, void *buf, size_t count, size_t *bytes_read);
 int vfs_write(struct file *f, const void *buf, size_t count, size_t *bytes_written);
 int vfs_close(struct file *f);
+int vfs_getdents(struct file *f, struct dirent *dirp, size_t count);
 
 struct vnode* console_get_vnode(void);
 

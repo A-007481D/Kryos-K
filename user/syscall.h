@@ -13,6 +13,18 @@
 #define SYS_WAITPID 6
 #define SYS_SPAWN   7
 #define SYS_EXECVE  8
+#define SYS_BRK     9
+#define SYS_GETDENTS 10
+
+struct dirent {
+    uint64_t ino;
+    uint64_t type;
+    uint64_t reclen;
+    char name[256];
+};
+
+#define DT_REG 1
+#define DT_DIR 2
 
 static inline uint64_t syscall3(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2) {
     uint64_t ret;
@@ -48,6 +60,22 @@ static inline int64_t sys_execve(const char* path, const char* const argv[], con
 
 static inline int64_t sys_waitpid(int64_t pid, int* status) {
     return (int64_t)syscall3(SYS_WAITPID, (uint64_t)pid, (uint64_t)status, 0);
+}
+
+static inline int64_t sys_read(uint64_t fd, void* buf, size_t len) {
+    return (int64_t)syscall3(SYS_READ, fd, (uint64_t)buf, (uint64_t)len);
+}
+
+static inline int64_t sys_open(const char* path, uint64_t flags) {
+    return (int64_t)syscall3(SYS_OPEN, (uint64_t)path, flags, 0);
+}
+
+static inline int64_t sys_close(uint64_t fd) {
+    return (int64_t)syscall3(SYS_CLOSE, fd, 0, 0);
+}
+
+static inline int64_t sys_getdents(uint64_t fd, struct dirent* dirp, size_t count) {
+    return (int64_t)syscall3(SYS_GETDENTS, fd, (uint64_t)dirp, (uint64_t)count);
 }
 
 #endif

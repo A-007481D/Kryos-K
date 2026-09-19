@@ -13,6 +13,17 @@
 #define SYS_SPAWN   7
 #define SYS_EXECVE  8
 #define SYS_BRK     9
+#define SYS_GETDENTS 10
+
+#define DT_REG 1
+#define DT_DIR 2
+
+struct dirent {
+    uint64_t ino;
+    uint64_t type;
+    uint64_t reclen;
+    char name[256];
+};
 
 typedef int64_t pid_t;
 typedef int64_t ssize_t;
@@ -29,6 +40,7 @@ int open(const char *path, int flags);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
+int getdents(int fd, struct dirent *dirp, size_t count);
 
 /* Memory API */
 void *sbrk(intptr_t increment);
