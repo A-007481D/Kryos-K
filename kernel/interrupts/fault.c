@@ -19,9 +19,11 @@ static const char *exception_names[32] = {
     "Security Exception", "Reserved"
 };
 
+#include "../../include/irq.h"
+
 void fault_handler(kernel_interrupt_frame *frame) {
-    if (frame->int_no == 32) {
-        timer_handler();
+    if (frame->int_no >= 32 && frame->int_no <= 47) {
+        irq_dispatch(frame);
         return;
     }
 
