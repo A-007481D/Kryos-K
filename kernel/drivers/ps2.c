@@ -2,6 +2,7 @@
 #include "../../include/irq.h"
 #include "../../include/stdio.h"
 #include "../fs/tty.h"
+#include "../fs/vt.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -31,6 +32,7 @@ static const char scancode_ascii_shift[] = {
 };
 
 static bool shift_pressed = false;
+static bool alt_pressed = false;
 static bool extended_mode = false;
 
 // Raw buffer
@@ -64,7 +66,10 @@ static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
     
     if (extended_mode) {
         extended_mode = false;
-        // Ignore extended keys for now
+        // Ignore most extended keys for now, but handle extended Alt if needed
+        // Actually left Alt is 0x38 without E0, right Alt is E0 38.
+        if (scancode == 0x38) alt_pressed = true;
+        else if (scancode == 0xB8) alt_pressed = false;
         return;
     }
     
@@ -73,11 +78,19 @@ static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
         uint8_t make_code = scancode & 0x7F;
         if (make_code == 0x2A || make_code == 0x36) { // Left or Right Shift
             shift_pressed = false;
+        } else if (make_code == 0x38) { // Alt
+            alt_pressed = false;
         }
     } else {
         // Make code
         if (scancode == 0x2A || scancode == 0x36) {
             shift_pressed = true;
+        } else if (scancode == 0x38) {
+            alt_pressed = true;
+        } else if (alt_pressed && scancode >= 0x3B && scancode <= 0x3E) {
+            // Alt + F1..F4
+            int vt_num = scancode - 0x3B;
+            vt_switch(vt_num);
         } else if (scancode < sizeof(scancode_ascii)) {
             char c = shift_pressed ? scancode_ascii_shift[scancode] : scancode_ascii[scancode];
             if (c) {

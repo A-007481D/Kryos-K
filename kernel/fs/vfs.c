@@ -34,6 +34,16 @@ static int vfs_resolve_path(const char *path, struct vnode **out_vn) {
         return 0;
     }
     
+    if (path[0] == 'd' && path[1] == 'e' && path[2] == 'v' && path[3] == '/' && 
+        path[4] == 't' && path[5] == 't' && path[6] == 'y') {
+        int tty_num = path[7] - '0';
+        if (tty_num >= 0 && tty_num <= 3 && path[8] == '\0') {
+            extern struct vnode* tty_get_vnode(int);
+            *out_vn = tty_get_vnode(tty_num);
+            return 0;
+        }
+    }
+    
     if (!root_vnode->ops->lookup) {
         return -ENOTDIR;
     }
@@ -48,8 +58,8 @@ int vfs_open(const char *path, uint64_t flags, struct file **out_file) {
         return err;
     }
     
-    if (vn->type != VNODE_TYPE_FILE) {
-        return -EINVAL; // Can only open files
+    if (vn->type != VNODE_TYPE_FILE && vn->type != VNODE_TYPE_DIR) {
+        return -EINVAL; // Can only open files and directories
     }
     
     struct file *f = kmalloc(sizeof(struct file));
@@ -62,6 +72,14 @@ int vfs_open(const char *path, uint64_t flags, struct file **out_file) {
     
     *out_file = f;
     return 0;
+}
+
+int vfs_getdents(struct file *f, struct dirent *dirp, size_t count) {
+    if (!f || !f->vnode) return -EBADF;
+    if (f->vnode->type != VNODE_TYPE_DIR) return -ENOTDIR;
+    if (!f->vnode->ops->getdents) return -EINVAL;
+    
+    return f->vnode->ops->getdents(f->vnode, f, dirp, count);
 }
 
 int vfs_read(struct file *f, void *buf, size_t count, size_t *bytes_read) {

@@ -2,8 +2,11 @@
 
 #include "../../include/vfs.h"
 
+struct thread;
+
 void tty_init(void);
 void tty_receive_char(char c);
 
-extern vnode_ops_t tty_vnode_ops;
-extern struct vnode tty_vnode;
+struct vnode* tty_get_vnode(int tty_num);
+void tty_remove_waiter(struct thread *t);
+

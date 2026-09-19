@@ -39,9 +39,10 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/pit.o \
     $(BUILD_DIR)/kernel/interrupts/irq.o \
     $(BUILD_DIR)/kernel/drivers/ps2.o \
+    $(BUILD_DIR)/kernel/drivers/vga.o \
     $(BUILD_DIR)/kernel/fs/vfs.o \
     $(BUILD_DIR)/kernel/fs/tarfs.o \
-    $(BUILD_DIR)/kernel/fs/console.o \
+    $(BUILD_DIR)/kernel/fs/vt.o \
     $(BUILD_DIR)/kernel/fs/tty.o \
     $(BUILD_DIR)/kernel/syscall/syscall.o \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \

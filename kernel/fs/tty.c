@@ -4,51 +4,69 @@
 #include "../../kernel/memory/virt.h"
 #include "../../include/heap.h"
 #include "../../kernel/lib/irq.h"
+#include "vt.h"
 #include <string.h>
 
 #define TTY_LINE_MAX 256
+#define MAX_TTYS MAX_VTS
 
-static char tty_buf[TTY_LINE_MAX];
-static int tty_len = 0;
+struct tty {
+    char buf[TTY_LINE_MAX];
+    int len;
+    struct thread *wait_queue;
+    struct vnode vnode;
+};
 
-struct thread *tty_wait_queue = NULL;
+static struct tty ttys[MAX_TTYS];
+static vnode_ops_t tty_vnode_ops;
 
-static void tty_echo(char c) {
-    if (c == '\b') {
-        serial_puts("\b \b");
-    } else {
-        char s[2] = {c, 0};
-        serial_puts(s);
+void tty_init(void) {
+    vt_init();
+    for (int i = 0; i < MAX_TTYS; i++) {
+        ttys[i].len = 0;
+        ttys[i].wait_queue = NULL;
+        ttys[i].vnode.ops = &tty_vnode_ops;
+        ttys[i].vnode.fs_private = (void *)(uintptr_t)i;
+        ttys[i].vnode.type = VNODE_TYPE_FILE;
     }
+}
+
+struct vnode* tty_get_vnode(int tty_num) {
+    if (tty_num < 0 || tty_num >= MAX_TTYS) return NULL;
+    return &ttys[tty_num].vnode;
 }
 
 void tty_receive_char(char c) {
     irq_state_t flags = irq_save();
     
+    int active_idx = vt_get_active();
+    struct tty *t = &ttys[active_idx];
+    
     if (c == '\b') {
-        if (tty_len > 0 && tty_buf[tty_len - 1] != '\n') {
-            tty_len--;
-            tty_echo('\b');
+        if (t->len > 0 && t->buf[t->len - 1] != '\n') {
+            t->len--;
+            vt_write(active_idx, "\b \b", 3);
         }
     } else if (c == '\n') {
-        if (tty_len < TTY_LINE_MAX) {
-            tty_buf[tty_len++] = '\n';
-            tty_echo('\n');
+        if (t->len < TTY_LINE_MAX) {
+            t->buf[t->len++] = '\n';
+            vt_write(active_idx, "\n", 1);
             
             // Wake all waiting threads
-            struct thread *curr = tty_wait_queue;
+            struct thread *curr = t->wait_queue;
             while (curr) {
                 struct thread *next = curr->next_waiter;
                 curr->state = THREAD_READY;
                 curr->next_waiter = NULL;
                 curr = next;
             }
-            tty_wait_queue = NULL;
+            t->wait_queue = NULL;
         }
     } else {
-        if (tty_len < TTY_LINE_MAX) {
-            tty_buf[tty_len++] = c;
-            tty_echo(c);
+        if (t->len < TTY_LINE_MAX) {
+            t->buf[t->len++] = c;
+            char s[1] = {c};
+            vt_write(active_idx, s, 1);
         }
     }
     
@@ -56,16 +74,17 @@ void tty_receive_char(char c) {
 }
 
 static int tty_read_vfs(struct vnode *vn, struct file *f, void *buf, size_t count, size_t *bytes_read) {
-    (void)vn;
     (void)f;
+    int tty_num = (int)(uintptr_t)vn->fs_private;
+    struct tty *t = &ttys[tty_num];
     char *kbuf = (char *)buf;
     
     irq_state_t flags = irq_save();
     
     while (1) {
         int nl_pos = -1;
-        for (int i = 0; i < tty_len; i++) {
-            if (tty_buf[i] == '\n') {
+        for (int i = 0; i < t->len; i++) {
+            if (t->buf[i] == '\n') {
                 nl_pos = i;
                 break;
             }
@@ -78,14 +97,14 @@ static int tty_read_vfs(struct vnode *vn, struct file *f, void *buf, size_t coun
                 to_copy = nl_pos + 1;
             }
             
-            memcpy(kbuf, tty_buf, to_copy);
+            memcpy(kbuf, t->buf, to_copy);
             *bytes_read = to_copy;
             
-            tty_len -= to_copy;
-            if (tty_len > 0) {
+            t->len -= to_copy;
+            if (t->len > 0) {
                 // memmove manually
-                for (int i = 0; i < tty_len; i++) {
-                    tty_buf[i] = tty_buf[i + to_copy];
+                for (int i = 0; i < t->len; i++) {
+                    t->buf[i] = t->buf[i + to_copy];
                 }
             }
             
@@ -95,31 +114,25 @@ static int tty_read_vfs(struct vnode *vn, struct file *f, void *buf, size_t coun
         
         // No complete line, enqueue and block
         struct thread *curr = thread_current();
-        curr->next_waiter = tty_wait_queue;
-        tty_wait_queue = curr;
+        curr->next_waiter = t->wait_queue;
+        t->wait_queue = curr;
         
         curr->state = THREAD_BLOCKED;
         schedule();
         
-        // Woken up, loop repeats with interrupts disabled from irq_save above?
-        // Actually schedule() returns with interrupts re-enabled if we came from syscall.
-        // Wait! We need to re-disable interrupts before re-checking the buffer.
-        // But schedule() doesn't touch interrupts, it just swaps context.
-        // If we came from syscall, context_switch will return, then irq_restore(flags) runs.
-        // BUT we need to check the buffer atomically!
-        // We can just do: irq_restore(flags); flags = irq_save();
         irq_restore(flags);
         flags = irq_save();
     }
 }
 
 static int tty_write_vfs(struct vnode *vn, struct file *f, const void *buf, size_t count, size_t *bytes_written) {
-    (void)vn;
     (void)f;
-    (void)buf;
-    (void)count;
-    (void)bytes_written;
-    return -1; // Write to tty not supported (fd1, fd2 map to console)
+    int tty_num = (int)(uintptr_t)vn->fs_private;
+    if (!buf || !bytes_written) return -EINVAL;
+    
+    vt_write(tty_num, (const char *)buf, count);
+    *bytes_written = count;
+    return 0;
 }
 
 static void tty_close_vfs(struct vnode *vn, struct file *f) {
@@ -127,18 +140,27 @@ static void tty_close_vfs(struct vnode *vn, struct file *f) {
     (void)f;
 }
 
-vnode_ops_t tty_vnode_ops = {
+static vnode_ops_t tty_vnode_ops = {
     .read = tty_read_vfs,
     .write = tty_write_vfs,
     .close = tty_close_vfs
 };
 
-struct vnode tty_vnode = {
-    .ops = &tty_vnode_ops,
-    .fs_private = NULL
-};
-
-void tty_init(void) {
-    tty_len = 0;
-    tty_wait_queue = NULL;
+void tty_remove_waiter(struct thread *t) {
+    for (int i = 0; i < MAX_TTYS; i++) {
+        struct tty *tty = &ttys[i];
+        if (tty->wait_queue == t) {
+            tty->wait_queue = t->next_waiter;
+        } else {
+            struct thread *tw = tty->wait_queue;
+            while (tw && tw->next_waiter) {
+                if (tw->next_waiter == t) {
+                    tw->next_waiter = t->next_waiter;
+                    break;
+                }
+                tw = tw->next_waiter;
+            }
+        }
+    }
 }
+
