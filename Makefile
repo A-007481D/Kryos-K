@@ -61,10 +61,12 @@ USER_HELLO = $(BUILD_DIR)/user/bin/hello.elf
 USER_TEST_EXEC = $(BUILD_DIR)/user/bin/test_exec.elf
 USER_TEST_ALLOC = $(BUILD_DIR)/user/bin/test_alloc.elf
 USER_TEST_TTY = $(BUILD_DIR)/user/bin/test_tty.elf
+USER_LS = $(BUILD_DIR)/user/bin/ls.elf
+USER_SHELL = $(BUILD_DIR)/user/bin/shell.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY) $(USER_LS) $(USER_SHELL)
 
 all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
 
@@ -100,7 +102,7 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf shell.elf
 
 iso: $(KERNEL_ISO)
 
