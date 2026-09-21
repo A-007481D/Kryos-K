@@ -167,7 +167,8 @@ EXPECTED_TESTS = [
     "VT-001",
     "VT-002",
     "VT-003",
-    "TTY-011"
+    "TTY-011",
+    "BLK-001",
 ]
 
 def main():
@@ -175,6 +176,7 @@ def main():
     
     print("Building Kryos...")
     res = subprocess.run(["make", "clean"], capture_output=True)
+    res = subprocess.run(["make", "all"], capture_output=True)
     res = subprocess.run(["make", "iso"], capture_output=True)
     if res.returncode != 0:
         print("Build failed!")
@@ -190,9 +192,11 @@ def main():
     cmd = [
         "qemu-system-x86_64",
         "-cdrom", iso_path,
+        "-drive", "file=build/disk.img,format=raw,index=0,media=disk",
         "-serial", "stdio",
         "-display", "none",
         "-no-reboot",
+        "-d", "guest_errors",
         "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"
     ]
     
@@ -288,7 +292,7 @@ def main():
         
     missing = []
     for e in EXPECTED_TESTS:
-        if e.startswith("PROC-") or e.startswith("EXEC-") or e.startswith("RUNTIME-") or e.startswith("TTY-") or e.startswith("USER-") or e.startswith("KBD-") or e.startswith("DIR-") or e.startswith("SHELL-") or e.startswith("VT-"):
+        if e.startswith("PROC-") or e.startswith("EXEC-") or e.startswith("RUNTIME-") or e.startswith("TTY-") or e.startswith("USER-") or e.startswith("KBD-") or e.startswith("DIR-") or e.startswith("SHELL-") or e.startswith("VT-") or e.startswith("BLK-"):
             if e not in passed_tests:
                 missing.append(e)
         else:
@@ -304,6 +308,18 @@ def main():
         
     if not (panic_detected and expecting_panic):
         print("[FAIL] TEST FAILURE: Expected terminal panic did not occur.")
+        sys.exit(1)
+        
+    print("Verifying persistent disk contents...")
+    try:
+        with open("build/disk.img", "rb") as f:
+            data = f.read(512)
+            if b"KRYOS_PERSISTENT_DATA_PHASE_20" not in data:
+                print("[FAIL] Persistent data not found in build/disk.img")
+                sys.exit(1)
+            print("[PASS] Persistent data verified on disk!")
+    except Exception as e:
+        print(f"[FAIL] Could not read disk.img: {e}")
         sys.exit(1)
         
     print("[SUCCESS] All tests passed!")

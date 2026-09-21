@@ -353,4 +353,25 @@ void test_syscall_suite(void) {
     TEST_BEGIN("VT-002"); TEST_END();
     TEST_BEGIN("VT-003"); TEST_END();
     TEST_BEGIN("TTY-011"); TEST_END();
+
+    // Phase 20: Block device tests
+    serial_puts("Running Phase 20 BLK tests...\n");
+    int64_t blk_pid = launch_user_test("test_blk.elf");
+    TEST_ASSERT(blk_pid > 0);
+    
+    if (blk_pid > 0) {
+        int blk_status = -1;
+        uint64_t phys = pmm_alloc_page();
+        vmm_map_page(&thread_current()->process->as, 0x5006000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+        int *u_blk_status = (int*)0x5006000;
+        *u_blk_status = -1;
+        
+        int64_t ret = (int64_t)syscall_dispatch(6, blk_pid, (uint64_t)u_blk_status, 0, NULL);
+        TEST_ASSERT(ret == blk_pid);
+        blk_status = *u_blk_status;
+        TEST_ASSERT(blk_status == 0);
+        
+        vmm_unmap_page(&thread_current()->process->as, 0x5006000);
+        pmm_free_page(phys);
+    }
 }
