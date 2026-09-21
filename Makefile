@@ -11,6 +11,7 @@ ISO_DIR = $(BUILD_DIR)/isodir
 
 KERNEL_ELF = $(BUILD_DIR)/kryos.elf
 KERNEL_ISO = $(BUILD_DIR)/kryos.iso
+DISK_IMG = $(BUILD_DIR)/disk.img
 
 OBJS = \
     build/kernel/process/process.o \
@@ -40,10 +41,12 @@ OBJS = \
     $(BUILD_DIR)/kernel/interrupts/irq.o \
     $(BUILD_DIR)/kernel/drivers/ps2.o \
     $(BUILD_DIR)/kernel/drivers/vga.o \
+    $(BUILD_DIR)/kernel/drivers/ata.o \
     $(BUILD_DIR)/kernel/fs/vfs.o \
     $(BUILD_DIR)/kernel/fs/tarfs.o \
     $(BUILD_DIR)/kernel/fs/vt.o \
     $(BUILD_DIR)/kernel/fs/tty.o \
+    $(BUILD_DIR)/kernel/fs/blk.o \
     $(BUILD_DIR)/kernel/syscall/syscall.o \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
@@ -64,12 +67,13 @@ USER_TEST_ALLOC = $(BUILD_DIR)/user/bin/test_alloc.elf
 USER_TEST_TTY = $(BUILD_DIR)/user/bin/test_tty.elf
 USER_LS = $(BUILD_DIR)/user/bin/ls.elf
 USER_SHELL = $(BUILD_DIR)/user/bin/shell.elf
+USER_TEST_BLK = $(BUILD_DIR)/user/bin/test_blk.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY) $(USER_LS) $(USER_SHELL)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY) $(USER_LS) $(USER_SHELL) $(USER_TEST_BLK)
 
-all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD)
+all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD) $(DISK_IMG)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -103,7 +107,11 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf shell.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf shell.elf test_blk.elf
+
+$(DISK_IMG):
+	@mkdir -p $(BUILD_DIR)
+	dd if=/dev/zero of=$@ bs=1M count=16
 
 iso: $(KERNEL_ISO)
 
@@ -115,14 +123,14 @@ $(KERNEL_ISO): $(KERNEL_ELF) $(INITRD) boot/grub/grub.cfg
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	grub-mkrescue -o $(KERNEL_ISO) $(ISO_DIR)
 
-run: iso
-	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -serial stdio -display none
+run: iso $(DISK_IMG)
+	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -display none
 
-debug: iso
-	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -serial stdio -display none -s -S
+debug: iso $(DISK_IMG)
+	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -display none -s -S
 
 clean:
 	rm -rf $(BUILD_DIR)
 
-test:
+test: $(DISK_IMG)
 	python3 scripts/test_runner.py
