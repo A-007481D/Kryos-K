@@ -44,6 +44,15 @@ static int vfs_resolve_path(const char *path, struct vnode **out_vn) {
         }
     }
     
+    if (strcmp(path, "dev/hda") == 0) {
+        extern struct vnode* blk_get_vnode(const char*);
+        struct vnode* vn = blk_get_vnode("hda");
+        if (vn) {
+            *out_vn = vn;
+            return 0;
+        }
+    }
+    
     if (!root_vnode->ops->lookup) {
         return -ENOTDIR;
     }
