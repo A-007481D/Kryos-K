@@ -47,6 +47,12 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     
     vfs_init();
     
+    // Block Device & ATA Init
+    extern void blk_init(void);
+    extern void ata_init(void);
+    blk_init();
+    ata_init();
+    
     // Find multiboot module 0 (initrd.tar)
     uint64_t initrd_start, initrd_end;
     if (multiboot_get_module(0, &initrd_start, &initrd_end)) {
