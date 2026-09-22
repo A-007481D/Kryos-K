@@ -61,9 +61,35 @@ static int vfs_resolve_path(const char *path, struct vnode **out_vn) {
 }
 
 int vfs_open(const char *path, uint64_t flags, struct file **out_file) {
+    if (!path) return -EFAULT;
+    
     struct vnode *vn = NULL;
     int err = vfs_resolve_path(path, &vn);
-    if (err < 0) {
+    if (err == -ENOENT && (flags & O_CREAT)) {
+        const char *name = path;
+        while (*name == '/') name++;
+        
+        if (strncmp(name, "dev/", 4) == 0) {
+            return -EACCES;
+        }
+        
+        if (!root_vnode || !root_vnode->ops || !root_vnode->ops->create) {
+            return -ENOTSUP;
+        }
+        
+        err = root_vnode->ops->create(root_vnode, name, VNODE_TYPE_FILE, &vn);
+        if (err < 0) return err;
+    } else if (err == 0) {
+        if ((flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL)) {
+            return -EEXIST;
+        }
+        if ((flags & O_TRUNC) && (flags & (O_WRONLY | O_RDWR))) {
+            if (vn->ops && vn->ops->truncate) {
+                err = vn->ops->truncate(vn);
+                if (err < 0) return err;
+            }
+        }
+    } else {
         return err;
     }
     
