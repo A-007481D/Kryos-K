@@ -942,6 +942,8 @@ void run_kernel_tests(void) {
     test_syscall_suite();
     
     test_kfs_suite();
+    extern void test_kfs_write_suite(void);
+    test_kfs_write_suite();
     test_vfs_suite();
     test_syscall_fs_suite();
     

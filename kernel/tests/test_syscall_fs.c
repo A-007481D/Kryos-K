@@ -55,7 +55,7 @@ void test_syscall_fs_suite(void) {
     serial_puts("FS-004 Passed.\n");
     
     // FS-007: Unsupported open flags
-    bad_fd = syscall_dispatch(3, (uint64_t)upath, 1, 0);
+    bad_fd = syscall_dispatch(3, (uint64_t)upath, 0x8000, 0);
     KASSERT(bad_fd == (uint64_t)-EINVAL);
     serial_puts("FS-007 Passed.\n");
     
