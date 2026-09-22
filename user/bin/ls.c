@@ -5,12 +5,11 @@ static void print(const char *str) {
 }
 
 int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+    const char *target = (argc > 1) ? argv[1] : "/";
     
-    int fd = open("/", 0);
+    int fd = open(target, 0);
     if (fd < 0) {
-        print("ls: failed to open /\n");
+        print("ls: failed to open directory\n");
         return 1;
     }
     
