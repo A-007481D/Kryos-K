@@ -71,8 +71,10 @@ static uint64_t sys_write(uint64_t fd, const void* buf, size_t len) {
     return bytes_written;
 }
 
+#define SUPPORTED_OPEN_FLAGS (O_RDONLY | O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND)
+
 static uint64_t sys_open(const char* path, uint64_t flags) {
-    if (flags != 0) { // O_RDONLY = 0
+    if ((flags & ~SUPPORTED_OPEN_FLAGS) != 0) {
         return (uint64_t)-EINVAL;
     }
     
