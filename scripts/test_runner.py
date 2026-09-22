@@ -101,6 +101,16 @@ EXPECTED_TESTS = [
     "FS-006 Passed.",
     "FS-008 Passed.",
     "FS-009 Passed.",
+    "DIR-H-001 Passed.",
+    "DIR-H-002 Passed.",
+    "DIR-H-003 Passed.",
+    "DIR-H-004 Passed.",
+    "DIR-H-005 Passed.",
+    "DIR-H-006 Passed.",
+    "DIR-H-007 Passed.",
+    "DIR-H-008 Passed.",
+    "DIR-H-009 Passed.",
+    "DIR-H-010 Passed.",
     
     # New strict tests
     "PROC-001",
@@ -308,7 +318,7 @@ def main():
         
     missing = []
     for e in EXPECTED_TESTS:
-        if e.startswith("PROC-") or e.startswith("EXEC-") or e.startswith("RUNTIME-") or e.startswith("TTY-") or e.startswith("USER-") or e.startswith("KBD-") or e.startswith("DIR-") or e.startswith("SHELL-") or e.startswith("VT-") or e.startswith("BLK-"):
+        if not e.endswith("Passed.") and not e.startswith("[PASS]"):
             if e not in passed_tests:
                 missing.append(e)
         else:

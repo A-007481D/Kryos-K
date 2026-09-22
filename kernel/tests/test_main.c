@@ -946,6 +946,8 @@ void run_kernel_tests(void) {
     test_kfs_write_suite();
     test_vfs_suite();
     test_syscall_fs_suite();
+    extern void test_dir_suite(void);
+    test_dir_suite();
     
     // Run this last because it permanently exhausts PMM frames (kfree doesn't return them to PMM)
     test_heap_009_exhaustion();

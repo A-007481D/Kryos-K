@@ -57,6 +57,7 @@ OBJS = \
     $(BUILD_DIR)/kernel/tests/test_kfs_write.o \
     $(BUILD_DIR)/kernel/tests/test_vfs.o \
     $(BUILD_DIR)/kernel/tests/test_syscall_fs.o \
+    $(BUILD_DIR)/kernel/tests/test_dir.o \
     $(BUILD_DIR)/kernel/tests/test_framework.o \
     $(BUILD_DIR)/kernel/tests/test_main.o
 
@@ -71,10 +72,12 @@ USER_LS = $(BUILD_DIR)/user/bin/ls.elf
 USER_CAT = $(BUILD_DIR)/user/bin/cat.elf
 USER_SHELL = $(BUILD_DIR)/user/bin/shell.elf
 USER_TEST_BLK = $(BUILD_DIR)/user/bin/test_blk.elf
+USER_MKDIR = $(BUILD_DIR)/user/bin/mkdir.elf
+USER_RM = $(BUILD_DIR)/user/bin/rm.elf
 
 INITRD = $(BUILD_DIR)/initrd.tar
 
-USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY) $(USER_LS) $(USER_CAT) $(USER_SHELL) $(USER_TEST_BLK)
+USER_BINARIES = $(USER_INIT) $(USER_HELLO) $(USER_TEST_EXEC) $(USER_TEST_ALLOC) $(USER_TEST_TTY) $(USER_LS) $(USER_CAT) $(USER_SHELL) $(USER_TEST_BLK) $(USER_MKDIR) $(USER_RM)
 
 all: $(KERNEL_ELF) $(USER_BINARIES) $(INITRD) $(DISK_IMG)
 
@@ -110,7 +113,7 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 	$(CC) $(CFLAGS) -ffreestanding -nostdlib -fno-pic -fno-pie -no-pie -Wl,--build-id=none -Wl,-Ttext=0x400000 $(BUILD_DIR)/user/libkryos/startup.o $< -L$(BUILD_DIR)/user -lkryos -o $@
 
 $(INITRD): $(USER_BINARIES)
-	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf cat.elf shell.elf test_blk.elf
+	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf cat.elf shell.elf test_blk.elf mkdir.elf rm.elf
 
 disk: $(USER_BINARIES)
 	@mkdir -p $(BUILD_DIR)
