@@ -215,7 +215,7 @@ static int kfs_vnode_getdents(struct vnode *vn, struct file *f, struct dirent *d
     
     f->offset += ent->reclen;
     kfree(dir_data);
-    return 1;
+    return sizeof(struct dirent);
 }
 
 static void kfs_vnode_close(struct vnode *vn, struct file *f) {
