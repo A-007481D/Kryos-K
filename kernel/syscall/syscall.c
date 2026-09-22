@@ -47,6 +47,7 @@ static uint64_t sys_write(uint64_t fd, const void* buf, size_t len) {
         return (uint64_t)-EBADF;
     }
 
+    if (len == 0) return 0;
     if (len > 4096) len = 4096;
 
     if (!user_range_readable(buf, len)) {
@@ -116,6 +117,7 @@ static uint64_t sys_read(uint64_t fd, void* buf, size_t count) {
         return (uint64_t)-EBADF;
     }
     
+    if (count == 0) return 0;
     if (count > 4096) count = 4096;
     
     if (!user_range_writable(buf, count)) {
