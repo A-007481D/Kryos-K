@@ -9,7 +9,8 @@ void test_preempt_suite(void);
 void test_user_suite(void);
 void test_process_suite(void);
 void test_process_hierarchy_suite(void);
-void test_tarfs_suite(void);
+void test_fs_suite(void);
+void test_kfs_suite(void);
 void test_vfs_suite(void);
 void test_syscall_fs_suite(void);
 
