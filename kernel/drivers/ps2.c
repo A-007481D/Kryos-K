@@ -41,17 +41,15 @@ static uint8_t raw_buffer[RAW_BUF_SIZE];
 static int raw_head = 0;
 static int raw_tail = 0;
 
-static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
-    (void)frame;
-    
-    // Read status
-    uint8_t status = inb(PS2_STATUS_PORT);
-    if (!(status & 1)) {
-        return; // No data available
-    }
-    
-    uint8_t scancode = inb(PS2_DATA_PORT);
-    
+bool ps2_is_shift_pressed(void) {
+    return shift_pressed;
+}
+
+bool ps2_is_alt_pressed(void) {
+    return alt_pressed;
+}
+
+void ps2_handle_scancode(uint8_t scancode) {
     // Store in raw diagnostic buffer
     raw_buffer[raw_head] = scancode;
     raw_head = (raw_head + 1) % RAW_BUF_SIZE;
@@ -66,8 +64,7 @@ static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
     
     if (extended_mode) {
         extended_mode = false;
-        // Ignore most extended keys for now, but handle extended Alt if needed
-        // Actually left Alt is 0x38 without E0, right Alt is E0 38.
+        // Handle extended Alt if needed
         if (scancode == 0x38) alt_pressed = true;
         else if (scancode == 0xB8) alt_pressed = false;
         return;
@@ -98,6 +95,19 @@ static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
             }
         }
     }
+}
+
+static void keyboard_irq_handler(kernel_interrupt_frame *frame) {
+    (void)frame;
+    
+    // Read status
+    uint8_t status = inb(PS2_STATUS_PORT);
+    if (!(status & 1)) {
+        return; // No data available
+    }
+    
+    uint8_t scancode = inb(PS2_DATA_PORT);
+    ps2_handle_scancode(scancode);
 }
 
 void ps2_init(void) {
