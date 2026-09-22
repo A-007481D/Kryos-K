@@ -70,6 +70,138 @@ static int kfs_read_inode(uint32_t ino, struct kfs_inode *out) {
     return 0;
 }
 
+static int kfs_write_inode(uint32_t ino, const struct kfs_inode *in) {
+    if (ino >= sb->inode_count) return -EINVAL;
+    
+    uint32_t inodes_per_block = KFS_BLOCK_SIZE / sizeof(struct kfs_inode); // 8
+    uint32_t blk_offset = ino / inodes_per_block;
+    uint32_t ino_offset = ino % inodes_per_block;
+    
+    uint8_t buf[KFS_BLOCK_SIZE];
+    int err = kfs_blk->read_sectors(kfs_blk, sb->inode_table_start + blk_offset, 1, buf);
+    if (err < 0) return err;
+    
+    struct kfs_inode *inode_arr = (struct kfs_inode *)buf;
+    inode_arr[ino_offset] = *in;
+    
+    return kfs_blk->write_sectors(kfs_blk, sb->inode_table_start + blk_offset, 1, buf);
+}
+
+static int kfs_alloc_inode(uint32_t type, uint32_t *out_ino) {
+    for (uint32_t i = 1; i < sb->inode_count; i++) {
+        uint32_t byte_idx = i / 8;
+        uint8_t bit_idx = i % 8;
+        if (!(inode_bitmap[byte_idx] & (1 << bit_idx))) {
+            inode_bitmap[byte_idx] |= (1 << bit_idx);
+            
+            uint32_t sec_offset = byte_idx / KFS_BLOCK_SIZE;
+            int err = kfs_blk->write_sectors(kfs_blk, sb->inode_bitmap_start + sec_offset, 1,
+                                             inode_bitmap + (sec_offset * KFS_BLOCK_SIZE));
+            if (err < 0) return err;
+            
+            struct kfs_inode new_in;
+            memset(&new_in, 0, sizeof(new_in));
+            new_in.type = type;
+            new_in.link_count = 1;
+            err = kfs_write_inode(i, &new_in);
+            if (err < 0) return err;
+            
+            *out_ino = i;
+            return 0;
+        }
+    }
+    return -ENOSPC;
+}
+
+static int kfs_free_inode(uint32_t ino) {
+    if (ino == 0 || ino >= sb->inode_count) return -EINVAL;
+    uint32_t byte_idx = ino / 8;
+    uint8_t bit_idx = ino % 8;
+    inode_bitmap[byte_idx] &= ~(1 << bit_idx);
+    
+    uint32_t sec_offset = byte_idx / KFS_BLOCK_SIZE;
+    return kfs_blk->write_sectors(kfs_blk, sb->inode_bitmap_start + sec_offset, 1,
+                                  inode_bitmap + (sec_offset * KFS_BLOCK_SIZE));
+}
+
+static int kfs_alloc_block(uint32_t *out_blk) {
+    for (uint32_t i = sb->data_blocks_start; i < sb->total_blocks; i++) {
+        uint32_t byte_idx = i / 8;
+        uint8_t bit_idx = i % 8;
+        if (!(block_bitmap[byte_idx] & (1 << bit_idx))) {
+            block_bitmap[byte_idx] |= (1 << bit_idx);
+            
+            uint32_t sec_offset = byte_idx / KFS_BLOCK_SIZE;
+            int err = kfs_blk->write_sectors(kfs_blk, sb->block_bitmap_start + sec_offset, 1,
+                                             block_bitmap + (sec_offset * KFS_BLOCK_SIZE));
+            if (err < 0) return err;
+            
+            uint8_t zero_buf[KFS_BLOCK_SIZE];
+            memset(zero_buf, 0, sizeof(zero_buf));
+            err = kfs_blk->write_sectors(kfs_blk, i, 1, zero_buf);
+            if (err < 0) return err;
+            
+            *out_blk = i;
+            return 0;
+        }
+    }
+    return -ENOSPC;
+}
+
+static int kfs_free_block(uint32_t blk) {
+    if (blk < sb->data_blocks_start || blk >= sb->total_blocks) return -EINVAL;
+    uint32_t byte_idx = blk / 8;
+    uint8_t bit_idx = blk % 8;
+    block_bitmap[byte_idx] &= ~(1 << bit_idx);
+    
+    uint32_t sec_offset = byte_idx / KFS_BLOCK_SIZE;
+    return kfs_blk->write_sectors(kfs_blk, sb->block_bitmap_start + sec_offset, 1,
+                                  block_bitmap + (sec_offset * KFS_BLOCK_SIZE));
+}
+
+static int kfs_map_or_alloc_block(struct kfs_inode *inode, uint32_t logical_blk, uint32_t *phys_blk, bool *inode_dirty) {
+    if (logical_blk < 10) {
+        if (inode->direct[logical_blk] == 0) {
+            uint32_t new_blk = 0;
+            int err = kfs_alloc_block(&new_blk);
+            if (err < 0) return err;
+            inode->direct[logical_blk] = new_blk;
+            *inode_dirty = true;
+        }
+        *phys_blk = inode->direct[logical_blk];
+        return 0;
+    } else {
+        uint32_t ind_offset = logical_blk - 10;
+        uint32_t max_ind = KFS_BLOCK_SIZE / sizeof(uint32_t); // 128
+        if (ind_offset >= max_ind) return -EFBIG;
+        
+        if (inode->indirect == 0) {
+            uint32_t new_ind = 0;
+            int err = kfs_alloc_block(&new_ind);
+            if (err < 0) return err;
+            inode->indirect = new_ind;
+            *inode_dirty = true;
+        }
+        
+        uint32_t ind_buf[KFS_BLOCK_SIZE / sizeof(uint32_t)];
+        int err = kfs_blk->read_sectors(kfs_blk, inode->indirect, 1, ind_buf);
+        if (err < 0) return err;
+        
+        if (ind_buf[ind_offset] == 0) {
+            uint32_t new_blk = 0;
+            err = kfs_alloc_block(&new_blk);
+            if (err < 0) return err;
+            ind_buf[ind_offset] = new_blk;
+            err = kfs_blk->write_sectors(kfs_blk, inode->indirect, 1, ind_buf);
+            if (err < 0) return err;
+        }
+        
+        *phys_blk = ind_buf[ind_offset];
+        return 0;
+    }
+}
+
+
 // Map a file logical block index to a physical block index
 static int kfs_map_block(struct kfs_inode *inode, uint32_t logical_blk, uint32_t *phys_blk) {
     if (logical_blk < 10) {
@@ -147,6 +279,7 @@ static int kfs_vnode_lookup(struct vnode *vn, const char *name, struct vnode **o
     if (inode.type != KFS_TYPE_DIR) return -ENOTDIR;
     
     struct file f;
+    memset(&f, 0, sizeof(f));
     f.vnode = vn;
     f.offset = 0;
     
@@ -195,6 +328,7 @@ static int kfs_vnode_getdents(struct vnode *vn, struct file *f, struct dirent *d
     if (!dir_data) return -ENOMEM;
     
     struct file tmp_f;
+    memset(&tmp_f, 0, sizeof(tmp_f));
     tmp_f.vnode = vn;
     tmp_f.offset = 0;
     size_t read = 0;
@@ -223,16 +357,182 @@ static void kfs_vnode_close(struct vnode *vn, struct file *f) {
     (void)f;
 }
 
-// Not implementing writes for userspace yet
+static int kfs_vnode_truncate(struct vnode *vn) {
+    uint32_t ino = (uint32_t)(uintptr_t)vn->fs_private;
+    struct kfs_inode inode;
+    int err = kfs_read_inode(ino, &inode);
+    if (err < 0) return err;
+    
+    for (int i = 0; i < 10; i++) {
+        if (inode.direct[i] != 0) {
+            kfs_free_block(inode.direct[i]);
+            inode.direct[i] = 0;
+        }
+    }
+    
+    if (inode.indirect != 0) {
+        uint32_t ind_buf[KFS_BLOCK_SIZE / sizeof(uint32_t)];
+        err = kfs_blk->read_sectors(kfs_blk, inode.indirect, 1, ind_buf);
+        if (err == 0) {
+            for (size_t i = 0; i < (KFS_BLOCK_SIZE / sizeof(uint32_t)); i++) {
+                if (ind_buf[i] != 0) {
+                    kfs_free_block(ind_buf[i]);
+                }
+            }
+        }
+        kfs_free_block(inode.indirect);
+        inode.indirect = 0;
+    }
+    
+    inode.size = 0;
+    return kfs_write_inode(ino, &inode);
+}
+
 static int kfs_vnode_write(struct vnode *vn, struct file *f, const void *buf, size_t count, size_t *written) {
-    (void)vn; (void)f; (void)buf; (void)count; (void)written;
-    return -EINVAL;
+    if ((f->flags & (O_WRONLY | O_RDWR)) == 0) {
+        return -EINVAL;
+    }
+    
+    if (count == 0) {
+        if (written) *written = 0;
+        return 0;
+    }
+    
+    uint32_t ino = (uint32_t)(uintptr_t)vn->fs_private;
+    struct kfs_inode inode;
+    int err = kfs_read_inode(ino, &inode);
+    if (err < 0) return err;
+    
+    if (f->flags & O_APPEND) {
+        f->offset = inode.size;
+    }
+    
+    const uint8_t *src = (const uint8_t *)buf;
+    size_t total_written = 0;
+    size_t to_write = count;
+    bool inode_dirty = false;
+    
+    while (to_write > 0) {
+        uint32_t logical_blk = f->offset / KFS_BLOCK_SIZE;
+        uint32_t blk_offset = f->offset % KFS_BLOCK_SIZE;
+        
+        uint32_t phys_blk = 0;
+        err = kfs_map_or_alloc_block(&inode, logical_blk, &phys_blk, &inode_dirty);
+        if (err < 0) {
+            if (total_written > 0) break;
+            return err;
+        }
+        
+        uint8_t blk_buf[KFS_BLOCK_SIZE];
+        size_t chunk = KFS_BLOCK_SIZE - blk_offset;
+        if (chunk > to_write) chunk = to_write;
+        
+        if (blk_offset > 0 || chunk < KFS_BLOCK_SIZE) {
+            err = kfs_blk->read_sectors(kfs_blk, phys_blk, 1, blk_buf);
+            if (err < 0) {
+                if (total_written > 0) break;
+                return err;
+            }
+        }
+        
+        memcpy(blk_buf + blk_offset, src, chunk);
+        err = kfs_blk->write_sectors(kfs_blk, phys_blk, 1, blk_buf);
+        if (err < 0) {
+            if (total_written > 0) break;
+            return err;
+        }
+        
+        src += chunk;
+        f->offset += chunk;
+        if (f->offset > inode.size) {
+            inode.size = f->offset;
+            inode_dirty = true;
+        }
+        to_write -= chunk;
+        total_written += chunk;
+    }
+    
+    if (inode_dirty) {
+        err = kfs_write_inode(ino, &inode);
+        if (err < 0) return err;
+    }
+    
+    if (written) *written = total_written;
+    return 0;
+}
+
+static int kfs_vnode_create(struct vnode *vn, const char *name, uint32_t type, struct vnode **out_vn) {
+    uint32_t dir_ino = (uint32_t)(uintptr_t)vn->fs_private;
+    struct kfs_inode dir_inode;
+    int err = kfs_read_inode(dir_ino, &dir_inode);
+    if (err < 0) return err;
+    if (dir_inode.type != KFS_TYPE_DIR) return -ENOTDIR;
+    
+    size_t name_len = strlen(name);
+    if (name_len == 0 || name_len > 255) return -EINVAL;
+    
+    // Check if entry already exists
+    struct vnode *existing = NULL;
+    err = kfs_vnode_lookup(vn, name, &existing);
+    if (err == 0) {
+        *out_vn = existing;
+        return 0;
+    }
+    
+    // Allocate new inode
+    uint32_t new_ino = 0;
+    uint32_t kfs_type = (type == VNODE_TYPE_DIR) ? KFS_TYPE_DIR : KFS_TYPE_FILE;
+    err = kfs_alloc_inode(kfs_type, &new_ino);
+    if (err < 0) return err;
+    
+    size_t base_len = sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint8_t) + name_len + 1;
+    size_t reclen = (base_len + 3) & ~3;
+    
+    uint8_t *dirent_buf = kmalloc(reclen);
+    if (!dirent_buf) {
+        kfs_free_inode(new_ino);
+        return -ENOMEM;
+    }
+    memset(dirent_buf, 0, reclen);
+    
+    struct kfs_dirent *dent = (struct kfs_dirent *)dirent_buf;
+    dent->inode = new_ino;
+    dent->reclen = (uint16_t)reclen;
+    dent->type = (uint8_t)kfs_type;
+    memcpy(dent->name, name, name_len + 1);
+    
+    // Append to directory inode
+    struct file dir_f;
+    memset(&dir_f, 0, sizeof(dir_f));
+    dir_f.vnode = vn;
+    dir_f.offset = dir_inode.size;
+    dir_f.flags = O_WRONLY;
+    dir_f.private_data = NULL;
+    
+    size_t written = 0;
+    err = kfs_vnode_write(vn, &dir_f, dirent_buf, reclen, &written);
+    kfree(dirent_buf);
+    if (err < 0) {
+        kfs_free_inode(new_ino);
+        return err;
+    }
+    
+    struct vnode *new_vn = kmalloc(sizeof(struct vnode));
+    if (!new_vn) return -ENOMEM;
+    new_vn->ops = vn->ops;
+    new_vn->fs_private = (void *)(uintptr_t)new_ino;
+    new_vn->type = (kfs_type == KFS_TYPE_DIR) ? VNODE_TYPE_DIR : VNODE_TYPE_FILE;
+    
+    *out_vn = new_vn;
+    return 0;
 }
 
 static const vnode_ops_t kfs_vnode_ops = {
     .read = kfs_vnode_read,
     .write = kfs_vnode_write,
     .lookup = kfs_vnode_lookup,
+    .create = kfs_vnode_create,
+    .truncate = kfs_vnode_truncate,
     .getdents = kfs_vnode_getdents,
     .close = kfs_vnode_close,
 };
