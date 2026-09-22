@@ -28,7 +28,7 @@ To execute the automated test suite:
 make test
 ```
 
-## Current Status (Phase 21 — Kryos File System & Persistence)
+## Current Status (Phase 22 — Dynamic File Creation, Writes & Utilities)
 
 Kryos has implemented the foundational layers of a modern Unix-like operating system:
 
@@ -39,12 +39,14 @@ Kryos has implemented the foundational layers of a modern Unix-like operating sy
 - **Process Subsystem**: Hierarchical process management (`fork`/`spawn`, transactional `execve`, `waitpid`, `exit`), ELF loading and validation, userspace memory management (`sys_brk`).
 - **Userspace Runtime**: Minimal standard library (`libkryos`), SysV ABI string arrays, dynamic memory allocation (`malloc`/`free`).
 - **TTY & Virtual Terminals**: VT switching, PS/2 keyboard driver with interrupt scancode decoding and modifier tracking, non-blocking/blocking TTY line discipline.
-- **Userspace Shell**: Interactive shell (`shell.elf`) and core commands (`ls`, `echo`, `cat`).
+- **Userspace Shell & Commands**: Interactive shell (`shell.elf`) and core commands (`ls`, `cat`, `echo`).
 - **Block Device Subsystem**: IDE/ATA PIO controller driver supporting single- and multi-sector reads and writes with hardware persistence across reboot cycles.
-- **Kryos File System (KFS)**: On-disk filesystem replacing ramdisks with persistent storage:
+- **Kryos File System (KFS)**: Full on-disk read/write Unix-style filesystem:
   - Superblock, inode bitmap, block allocation bitmap, and inode table.
-  - File reads, writes, directory listing (`getdents`), and path lookup.
+  - Runtime dynamic inode and data block allocation/freeing with immediate disk persistence.
+  - File creation (`O_CREAT`), truncation (`O_TRUNC`), append mode (`O_APPEND`), and multi-sector writes spanning direct (0–9) and indirect block tables (up to 70.6 KiB).
+  - Directory entry creation and directory traversal (`getdents`).
   - Partition layout reserving boot sectors 0–63 for bootloaders and raw persistence tests.
-  - Offline image builder (`mkfs_kfs.py`) and filesystem integrity checker (`kfsck.py`).
-- **Verification & Testing**: Rigorous, staff-level automated test suite executing 100+ hardware, kernel, and userspace invariant assertions under QEMU.
+  - Offline image builder (`mkfs_kfs.py`) and static filesystem integrity checker (`kfsck.py`).
+- **Verification & Testing**: Rigorous, staff-level automated test suite executing 120+ hardware, kernel, and userspace invariant assertions under QEMU.
 
