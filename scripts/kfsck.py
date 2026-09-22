@@ -5,6 +5,7 @@ import math
 
 KFS_MAGIC = 0x4B465331
 KFS_BLOCK_SIZE = 512
+KFS_SUPERBLOCK_BLK = 64
 
 def main():
     if len(sys.argv) < 2:
@@ -16,11 +17,12 @@ def main():
     with open(img, "rb") as f:
         data = f.read()
         
-    if len(data) < KFS_BLOCK_SIZE:
+    if len(data) < (KFS_SUPERBLOCK_BLK + 1) * KFS_BLOCK_SIZE:
         print("[FAIL] Image too small for superblock")
         sys.exit(1)
         
-    sb = data[:512]
+    sb_offset = KFS_SUPERBLOCK_BLK * KFS_BLOCK_SIZE
+    sb = data[sb_offset:sb_offset + 512]
     magic, total_blocks, inode_count, \
     bmap_start, bmap_blks, \
     imap_start, imap_blks, \

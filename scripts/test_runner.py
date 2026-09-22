@@ -328,6 +328,15 @@ def main():
         print(f"[FAIL] Could not read disk.img: {e}")
         sys.exit(1)
         
+    print("Verifying KFS filesystem integrity...")
+    kfsck_res = subprocess.run(["python3", "scripts/kfsck.py", "build/disk.img"], capture_output=True, text=True)
+    if kfsck_res.returncode != 0:
+        print("[FAIL] KFS integrity check failed after test execution!")
+        print(kfsck_res.stdout)
+        print(kfsck_res.stderr)
+        sys.exit(1)
+    print("[PASS] KFS filesystem integrity verified!")
+
     print("[SUCCESS] All tests passed!")
     sys.exit(0)
 

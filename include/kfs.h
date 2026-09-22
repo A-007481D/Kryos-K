@@ -14,14 +14,15 @@
 #define KFS_INODE_COUNT         128
 
 // Block assignments
-#define KFS_SUPERBLOCK_BLK      0
-#define KFS_BLOCK_BITMAP_START  1
+#define KFS_RESERVED_BOOT_BLKS  64  // 32 KiB reserved area for MBR/boot/raw block persistence
+#define KFS_SUPERBLOCK_BLK      64
+#define KFS_BLOCK_BITMAP_START  65
 #define KFS_BLOCK_BITMAP_BLKS   8   // (32768 bits / 8 bytes_per_byte = 4096 bytes = 8 blocks)
-#define KFS_INODE_BITMAP_START  9
+#define KFS_INODE_BITMAP_START  73
 #define KFS_INODE_BITMAP_BLKS   1   // (128 bits = 16 bytes <= 1 block)
-#define KFS_INODE_TABLE_START   10
+#define KFS_INODE_TABLE_START   74
 #define KFS_INODE_TABLE_BLKS    16  // (128 inodes * 64 bytes = 8192 bytes = 16 blocks)
-#define KFS_DATA_BLOCKS_START   26
+#define KFS_DATA_BLOCKS_START   90
 
 #define KFS_ROOT_INODE          0
 
