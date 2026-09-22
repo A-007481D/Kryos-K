@@ -23,6 +23,8 @@ typedef struct vnode_ops {
     int (*lookup)(struct vnode *vn, const char *name, struct vnode **out_vn);
     int (*create)(struct vnode *vn, const char *name, uint32_t type, struct vnode **out_vn);
     int (*truncate)(struct vnode *vn);
+    int (*unlink)(struct vnode *vn, const char *name);
+    int (*rmdir)(struct vnode *vn, const char *name);
     int (*getdents)(struct vnode *vn, struct file *f, struct dirent *dirp, size_t count);
     void (*close)(struct vnode *vn, struct file *f);
 } vnode_ops_t;
@@ -63,16 +65,23 @@ struct file {
 #define EEXIST  17
 #define ENODEV  19
 #define ENOTDIR 20
+#define EISDIR  21
 #define EINVAL  22
 #define EFBIG   27
 #define ENOSPC  28
 #define EROFS   30
+#define ENAMETOOLONG 36
+#define ENOTEMPTY 39
 #define ENOTSUP 95
 
 
 void vfs_init(void);
 int vfs_mount_root(struct vnode *root);
+int vfs_resolve_path(const char *path, struct vnode **out_vn);
 int vfs_open(const char *path, uint64_t flags, struct file **out_file);
+int vfs_mkdir(const char *path, uint64_t mode);
+int vfs_unlink(const char *path);
+int vfs_rmdir(const char *path);
 int vfs_read(struct file *f, void *buf, size_t count, size_t *bytes_read);
 int vfs_write(struct file *f, const void *buf, size_t count, size_t *bytes_written);
 int vfs_close(struct file *f);
