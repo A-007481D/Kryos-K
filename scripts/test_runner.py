@@ -214,12 +214,19 @@ def main():
     running_tests = set()
     passed_tests = set()
     legacy_passed = set()
+    import select
     
     while True:
         if time.time() - start_time > timeout:
             process.kill()
             print("\n[FAIL] TIMEOUT")
             sys.exit(1)
+            
+        rlist, _, _ = select.select([process.stdout], [], [], 0.1)
+        if not rlist:
+            if process.poll() is not None:
+                break
+            continue
             
         line = process.stdout.readline()
         if not line and process.poll() is not None:
