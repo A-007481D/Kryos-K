@@ -536,6 +536,69 @@ static uint64_t sys_brk(uint64_t new_brk) {
     return new_brk;
 }
 
+static uint64_t sys_mkdir(const char *path, uint64_t mode) {
+    if (!user_range_readable(path, 1)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    char kpath[256];
+    size_t i = 0;
+    while (i < 255) {
+        if (!user_range_readable(path + i, 1)) return (uint64_t)-EFAULT;
+        kpath[i] = path[i];
+        if (kpath[i] == '\0') break;
+        i++;
+    }
+    if (i == 255 && kpath[254] != '\0') return (uint64_t)-EINVAL;
+    kpath[i] = '\0';
+    
+    int err = vfs_mkdir(kpath, mode);
+    if (err < 0) return (uint64_t)err;
+    return 0;
+}
+
+static uint64_t sys_unlink(const char *path) {
+    if (!user_range_readable(path, 1)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    char kpath[256];
+    size_t i = 0;
+    while (i < 255) {
+        if (!user_range_readable(path + i, 1)) return (uint64_t)-EFAULT;
+        kpath[i] = path[i];
+        if (kpath[i] == '\0') break;
+        i++;
+    }
+    if (i == 255 && kpath[254] != '\0') return (uint64_t)-EINVAL;
+    kpath[i] = '\0';
+    
+    int err = vfs_unlink(kpath);
+    if (err < 0) return (uint64_t)err;
+    return 0;
+}
+
+static uint64_t sys_rmdir(const char *path) {
+    if (!user_range_readable(path, 1)) {
+        return (uint64_t)-EFAULT;
+    }
+    
+    char kpath[256];
+    size_t i = 0;
+    while (i < 255) {
+        if (!user_range_readable(path + i, 1)) return (uint64_t)-EFAULT;
+        kpath[i] = path[i];
+        if (kpath[i] == '\0') break;
+        i++;
+    }
+    if (i == 255 && kpath[254] != '\0') return (uint64_t)-EINVAL;
+    kpath[i] = '\0';
+    
+    int err = vfs_rmdir(kpath);
+    if (err < 0) return (uint64_t)err;
+    return 0;
+}
+
 uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, struct syscall_frame *frame) {
     switch (nr) {
         case 0:
@@ -561,6 +624,12 @@ uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2, st
             return sys_brk(a0);
         case 10:
             return sys_getdents(a0, (struct dirent*)a1, a2);
+        case 11:
+            return sys_mkdir((const char*)a0, a1);
+        case 12:
+            return sys_unlink((const char*)a0);
+        case 13:
+            return sys_rmdir((const char*)a0);
         default:
             return (uint64_t)-ENOSYS;
     }
