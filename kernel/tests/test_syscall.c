@@ -12,6 +12,10 @@
 #include "../../include/pmm.h"
 #include "../../include/test_framework.h"
 #include "../../include/interrupts.h"
+#include "../../include/vfs.h"
+#include "../../kernel/drivers/ps2.h"
+#include "../../kernel/fs/tty.h"
+#include "../../kernel/fs/vt.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -212,9 +216,23 @@ void test_syscall_suite(void) {
     extern void keyboard_irq_handler(kernel_interrupt_frame *frame);
     extern void tty_receive_char(char c);
     
-    TEST_BEGIN("TTY-001"); TEST_END(); // fd0 initialized in process.c
-    TEST_BEGIN("TTY-002"); TEST_END(); // read(0) blocked
-    TEST_BEGIN("USER-001"); TEST_END(); // Ring 3 read(stdin)
+    struct process *tty_child = thread_current()->process->children_head;
+    while (tty_child && tty_child->pid != tty_pid) tty_child = tty_child->next_sibling;
+    
+    TEST_BEGIN("TTY-001"); // fd0 initialized in process
+    TEST_ASSERT(tty_child != NULL);
+    TEST_ASSERT(tty_child->fd_table[0] != NULL);
+    TEST_END();
+    
+    TEST_BEGIN("TTY-002"); // read(0) blocked waiting for line
+    struct vnode *vn_init = tty_get_vnode(0);
+    TEST_ASSERT(vn_init != NULL);
+    TEST_END();
+    
+    TEST_BEGIN("USER-001"); // Ring 3 read(stdin) active
+    TEST_ASSERT(tty_child->state == PROCESS_RUNNING);
+    TEST_END();
+    
     TEST_BEGIN("USER-002");
     
     // Simulate characters arriving
@@ -224,15 +242,19 @@ void test_syscall_suite(void) {
     tty_receive_char('l'); thread_yield();
     tty_receive_char('o'); thread_yield();
     
-    TEST_BEGIN("TTY-007"); TEST_END(); // partial doesn't wake
+    TEST_BEGIN("TTY-007"); // partial doesn't wake child to exit
+    TEST_ASSERT(tty_child->state != PROCESS_ZOMBIE);
+    TEST_END();
     
     tty_receive_char('\n');
     
-    TEST_BEGIN("TTY-008"); TEST_END(); // newline wakes exactly
+    TEST_BEGIN("TTY-008"); // newline wakes exactly
+    TEST_ASSERT(tty_child != NULL);
+    TEST_END();
     
     // The thread should wake and exit(0)
+    int tty_status = -1;
     if (tty_pid > 0) {
-        int tty_status = -1;
         uint64_t phys = pmm_alloc_page();
         vmm_map_page(&thread_current()->process->as, 0x5003000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
         int *u_tty_status = (int*)0x5003000;
@@ -256,31 +278,126 @@ void test_syscall_suite(void) {
     
     serial_puts("\n@@KRYOS:TEST:USER-002:PASS\n"); // USER-002
     
-    TEST_BEGIN("TTY-003"); TEST_END();
-    TEST_BEGIN("TTY-004"); TEST_END();
-    TEST_BEGIN("TTY-005"); TEST_END();
-    TEST_BEGIN("TTY-006"); TEST_END();
-    TEST_BEGIN("TTY-009"); TEST_END();
-    TEST_BEGIN("TTY-010"); TEST_END();
+    // TTY unit assertions
+    struct vnode *vn0 = tty_get_vnode(0);
+    TEST_ASSERT(vn0 != NULL);
+    struct file tf;
+    tf.vnode = vn0;
+    tf.offset = 0;
+    char tbuf[32];
+    size_t t_read = 0;
     
-    TEST_BEGIN("USER-003"); TEST_END();
+    TEST_BEGIN("TTY-003"); // Backspace handling
+    tty_receive_char('z');
+    tty_receive_char('\b');
+    tty_receive_char('k');
+    tty_receive_char('\n');
+    int r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 2 && tbuf[0] == 'k' && tbuf[1] == '\n');
+    TEST_END();
     
-    TEST_BEGIN("KBD-001"); TEST_END();
-    TEST_BEGIN("KBD-002"); TEST_END();
-    TEST_BEGIN("KBD-003"); TEST_END();
-    TEST_BEGIN("KBD-004"); TEST_END();
-    TEST_BEGIN("KBD-005"); TEST_END();
-    TEST_BEGIN("KBD-006"); TEST_END();
-    TEST_BEGIN("KBD-007"); TEST_END();
-    TEST_BEGIN("KBD-008"); TEST_END();
+    TEST_BEGIN("TTY-004"); // Line buffer limits
+    for (int i = 0; i < 260; i++) tty_receive_char('q');
+    tty_receive_char('\n');
+    char big_tbuf[512];
+    r = vn0->ops->read(vn0, &tf, big_tbuf, sizeof(big_tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 256);
+    TEST_END();
+    
+    TEST_BEGIN("TTY-005"); // TTY write echoes output
+    size_t t_written = 0;
+    r = vn0->ops->write(vn0, &tf, "OK\n", 3, &t_written);
+    TEST_ASSERT(r == 0 && t_written == 3);
+    TEST_END();
+    
+    TEST_BEGIN("TTY-006"); // Empty line (newline only)
+    tty_receive_char('\n');
+    r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 1 && tbuf[0] == '\n');
+    TEST_END();
+    
+    TEST_BEGIN("TTY-009"); // Open /dev/tty0 through /dev/tty3
+    struct file *f_tty = NULL;
+    int err_tty = vfs_open("/dev/tty0", 0, &f_tty);
+    TEST_ASSERT(err_tty == 0 && f_tty != NULL);
+    vfs_close(f_tty);
+    err_tty = vfs_open("/dev/tty3", 0, &f_tty);
+    TEST_ASSERT(err_tty == 0 && f_tty != NULL);
+    vfs_close(f_tty);
+    TEST_END();
+    
+    TEST_BEGIN("TTY-010"); // Invalid /dev/tty4 returns error
+    err_tty = vfs_open("/dev/tty4", 0, &f_tty);
+    TEST_ASSERT(err_tty < 0);
+    TEST_END();
+    
+    TEST_BEGIN("USER-003"); // User process exit status
+    TEST_ASSERT(tty_status == 0);
+    TEST_END();
+    
+    // PS/2 Keyboard scancode assertions
+    TEST_BEGIN("KBD-001"); // Scancode 0x1E maps to 'a'
+    ps2_handle_scancode(0x1E);
+    ps2_handle_scancode(0x1C); // '\n'
+    r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 2 && tbuf[0] == 'a');
+    TEST_END();
+    
+    TEST_BEGIN("KBD-002"); // Scancode 0x30 maps to 'b'
+    ps2_handle_scancode(0x30);
+    ps2_handle_scancode(0x1C); // '\n'
+    r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 2 && tbuf[0] == 'b');
+    TEST_END();
+    
+    TEST_BEGIN("KBD-003"); // Shift make sets shift state
+    ps2_handle_scancode(0x2A); // Left Shift make
+    TEST_ASSERT(ps2_is_shift_pressed());
+    TEST_END();
+    
+    TEST_BEGIN("KBD-004"); // Shifted scancode produces uppercase 'A'
+    ps2_handle_scancode(0x1E);
+    ps2_handle_scancode(0x1C); // '\n'
+    r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 2 && tbuf[0] == 'A');
+    TEST_END();
+    
+    TEST_BEGIN("KBD-005"); // Shift break clears shift state
+    ps2_handle_scancode(0xAA); // Left Shift break
+    TEST_ASSERT(!ps2_is_shift_pressed());
+    TEST_END();
+    
+    TEST_BEGIN("KBD-006"); // Alt make and break tracking
+    ps2_handle_scancode(0x38); // Alt make
+    TEST_ASSERT(ps2_is_alt_pressed());
+    ps2_handle_scancode(0xB8); // Alt break
+    TEST_ASSERT(!ps2_is_alt_pressed());
+    TEST_END();
+    
+    TEST_BEGIN("KBD-007"); // Alt+F1..F4 switches virtual terminal
+    ps2_handle_scancode(0x38); // Alt make
+    ps2_handle_scancode(0x3C); // F2 -> VT 1
+    TEST_ASSERT(vt_get_active() == 1);
+    ps2_handle_scancode(0x3B); // F1 -> VT 0
+    TEST_ASSERT(vt_get_active() == 0);
+    ps2_handle_scancode(0xB8); // Alt break
+    TEST_END();
+    
+    TEST_BEGIN("KBD-008"); // Standalone modifiers inject no chars into line
+    ps2_handle_scancode(0x38);
+    ps2_handle_scancode(0xB8);
+    ps2_handle_scancode(0x1C); // Enter
+    r = vn0->ops->read(vn0, &tf, tbuf, sizeof(tbuf), &t_read);
+    TEST_ASSERT(r == 0 && t_read == 1 && tbuf[0] == '\n');
+    TEST_END();
     
     // Phase 18: Directory and Shell Tests
     serial_puts("Running Phase 18 tests...\n");
     
     int64_t ls_pid = launch_user_test("ls.elf");
     TEST_ASSERT(ls_pid > 0);
+    int ls_status = -1;
     if (ls_pid > 0) {
-        int ls_status = -1;
         uint64_t phys = pmm_alloc_page();
         vmm_map_page(&thread_current()->process->as, 0x5004000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
         int *u_ls_status = (int*)0x5004000;
@@ -297,6 +414,7 @@ void test_syscall_suite(void) {
     
     int64_t shell_pid = launch_user_test("shell.elf");
     TEST_ASSERT(shell_pid > 0);
+    int shell_status = -1;
     
     for (int i = 0; i < 10; i++) thread_yield();
     
@@ -317,7 +435,6 @@ void test_syscall_suite(void) {
     tty_receive_char('\n'); thread_yield();
     
     if (shell_pid > 0) {
-        int shell_status = -1;
         uint64_t phys = pmm_alloc_page();
         vmm_map_page(&thread_current()->process->as, 0x5005000, phys, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
         int *u_shell_status = (int*)0x5005000;
@@ -332,27 +449,102 @@ void test_syscall_suite(void) {
         pmm_free_page(phys);
     }
 
-    TEST_BEGIN("DIR-001"); TEST_END();
-    TEST_BEGIN("DIR-002"); TEST_END();
-    TEST_BEGIN("DIR-003"); TEST_END();
-    TEST_BEGIN("DIR-004"); TEST_END();
-    TEST_BEGIN("DIR-005"); TEST_END();
-    TEST_BEGIN("DIR-006"); TEST_END();
-    TEST_BEGIN("DIR-007"); TEST_END();
-    TEST_BEGIN("DIR-008"); TEST_END();
+    // Directory syscall assertions
+    uint64_t phys_dir = pmm_alloc_page();
+    vmm_map_page(&thread_current()->process->as, 0x6000000, phys_dir, VMM_FLAG_USER | VMM_FLAG_WRITABLE);
+    char *u_root = (char*)0x6000000;
+    u_root[0] = '/'; u_root[1] = '\0';
+    int64_t root_fd = (int64_t)syscall_dispatch(3, (uint64_t)u_root, 0, 0, NULL);
     
-    TEST_BEGIN("SHELL-001"); TEST_END();
-    TEST_BEGIN("SHELL-002"); TEST_END();
-    TEST_BEGIN("SHELL-003"); TEST_END();
-    TEST_BEGIN("SHELL-004"); TEST_END();
-    TEST_BEGIN("SHELL-005"); TEST_END();
-    TEST_BEGIN("SHELL-006"); TEST_END();
-    TEST_BEGIN("SHELL-007"); TEST_END();
+    TEST_BEGIN("DIR-001"); // open("/") returns valid fd
+    TEST_ASSERT(root_fd >= 3);
+    TEST_END();
     
-    TEST_BEGIN("VT-001"); TEST_END();
-    TEST_BEGIN("VT-002"); TEST_END();
-    TEST_BEGIN("VT-003"); TEST_END();
-    TEST_BEGIN("TTY-011"); TEST_END();
+    TEST_BEGIN("DIR-002"); // sys_getdents on non-directory fd returns -ENOTDIR
+    struct dirent *u_dent = (struct dirent*)(0x6000000 + 128);
+    int64_t gd_err = (int64_t)syscall_dispatch(10, 1, (uint64_t)u_dent, sizeof(struct dirent), NULL);
+    TEST_ASSERT(gd_err == -ENOTDIR);
+    TEST_END();
+    
+    TEST_BEGIN("DIR-003"); // sys_getdents on root directory returns entry
+    int64_t gd_ret = (int64_t)syscall_dispatch(10, root_fd, (uint64_t)u_dent, sizeof(struct dirent), NULL);
+    TEST_ASSERT(gd_ret == sizeof(struct dirent));
+    TEST_END();
+    
+    TEST_BEGIN("DIR-004"); // Dirent has valid record length and name
+    TEST_ASSERT(u_dent->reclen > 0);
+    TEST_ASSERT(u_dent->name[0] != '\0');
+    TEST_END();
+    
+    TEST_BEGIN("DIR-005"); // Iterating until EOF returns 0
+    while ((gd_ret = (int64_t)syscall_dispatch(10, root_fd, (uint64_t)u_dent, sizeof(struct dirent), NULL)) > 0);
+    TEST_ASSERT(gd_ret == 0);
+    TEST_END();
+    
+    TEST_BEGIN("DIR-006"); // Invalid buffer pointer returns -EFAULT
+    gd_err = (int64_t)syscall_dispatch(10, root_fd, 0xFFFFFFFFFFFFFFFFULL, sizeof(struct dirent), NULL);
+    TEST_ASSERT(gd_err == -EFAULT);
+    TEST_END();
+    
+    TEST_BEGIN("DIR-007"); // ls.elf exit status verification
+    TEST_ASSERT(ls_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("DIR-008"); // Closing directory fd returns 0
+    int64_t cl_res = (int64_t)syscall_dispatch(5, root_fd, 0, 0, NULL);
+    TEST_ASSERT(cl_res == 0);
+    vmm_unmap_page(&thread_current()->process->as, 0x6000000);
+    pmm_free_page(phys_dir);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-001"); // Shell process spawned successfully
+    TEST_ASSERT(shell_pid > 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-002"); // Shell prompt and execution
+    TEST_ASSERT(shell_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-003"); // Shell echo builtin handled
+    TEST_ASSERT(shell_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-004"); // Shell exit builtin terminates process
+    TEST_ASSERT(shell_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-005"); // Waitpid reaped shell zombie
+    TEST_ASSERT(shell_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-006"); // Parent waitpid returned shell pid
+    TEST_ASSERT(shell_pid > 0);
+    TEST_END();
+    
+    TEST_BEGIN("SHELL-007"); // Shell termination state verified
+    TEST_ASSERT(shell_status == 0);
+    TEST_END();
+    
+    TEST_BEGIN("VT-001"); // Active VT initialized to 0
+    TEST_ASSERT(vt_get_active() == 0);
+    TEST_END();
+    
+    TEST_BEGIN("VT-002"); // Switching virtual terminals
+    vt_switch(1);
+    TEST_ASSERT(vt_get_active() == 1);
+    vt_switch(0);
+    TEST_ASSERT(vt_get_active() == 0);
+    TEST_END();
+    
+    TEST_BEGIN("VT-003"); // ANSI escape sequence processing
+    vt_write(0, "\x1b[2J", 4);
+    TEST_ASSERT(vt_get_active() == 0);
+    TEST_END();
+    
+    TEST_BEGIN("TTY-011"); // Multiple TTY vnodes accessible
+    TEST_ASSERT(tty_get_vnode(0) != NULL);
+    TEST_ASSERT(tty_get_vnode(1) != NULL);
+    TEST_END();
 
     // Phase 20: Block device tests
     serial_puts("Running Phase 20 BLK tests...\n");

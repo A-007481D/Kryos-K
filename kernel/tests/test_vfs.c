@@ -48,9 +48,27 @@ void test_vfs_suite(void) {
     vfs_close(f3);
     serial_puts("VFS-006 Passed.\n");
     
-    // VFS-005, 007, 008, 009 are implicitly tested or handled by VFS basics.
+    // VFS-005: vfs_read with NULL file pointer returns -EBADF
+    size_t dummy_br = 0;
+    err = vfs_read(NULL, buf, 5, &dummy_br);
+    KASSERT(err == -EBADF);
     serial_puts("VFS-005 Passed.\n");
+    
+    // VFS-007: vfs_write with NULL file pointer returns -EBADF
+    size_t dummy_bw = 0;
+    err = vfs_write(NULL, buf, 5, &dummy_bw);
+    KASSERT(err == -EBADF);
     serial_puts("VFS-007 Passed.\n");
+    
+    // VFS-008: vfs_close with NULL pointer returns -EBADF
+    err = vfs_close(NULL);
+    KASSERT(err == -EBADF);
     serial_puts("VFS-008 Passed.\n");
+    
+    // VFS-009: Root directory lookup returns VNODE_TYPE_DIR
+    struct file *f_root = NULL;
+    err = vfs_open("/", 0, &f_root);
+    KASSERT(err == 0 && f_root != NULL && f_root->vnode->type == VNODE_TYPE_DIR);
+    vfs_close(f_root);
     serial_puts("VFS-009 Passed.\n");
 }

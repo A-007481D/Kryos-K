@@ -4,8 +4,11 @@
 #include "../../include/serial.h"
 #include "../../include/process.h"
 #include "../../include/vfs.h"
+#include "../../include/pmm.h"
+#include "../../kernel/memory/vmm.h"
 
 extern uint64_t syscall_dispatch(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2);
+extern struct process* kernel_process;
 
 void test_syscall_fs_suite(void) {
     // FS-001: open("/init.elf")
@@ -18,9 +21,6 @@ void test_syscall_fs_suite(void) {
     
     // To properly test, we should map a page in userspace and put the string there.
     uint64_t test_virt = 0x0000100000000000ULL;
-    extern uint64_t pmm_alloc_page(void);
-    extern bool vmm_map_page(void* as, uint64_t vaddr, uint64_t paddr, uint64_t flags);
-    extern struct process* kernel_process;
     
     uint64_t p1 = pmm_alloc_page();
     vmm_map_page(&kernel_process->as, test_virt, p1, 2); // 2 = USER
@@ -35,9 +35,6 @@ void test_syscall_fs_suite(void) {
     
     // FS-002: read()
     uint64_t test_buf = test_virt + 256;
-    // Map with WRITABLE|USER (2|1 = 3) Wait, flags: 1=WRITABLE, 2=USER
-    // Let's assume flags 3 = WRITABLE|USER
-    extern bool vmm_unmap_page(void* as, uint64_t vaddr);
     vmm_unmap_page(&kernel_process->as, test_virt);
     vmm_map_page(&kernel_process->as, test_virt, p1, 3);
     
@@ -70,9 +67,32 @@ void test_syscall_fs_suite(void) {
     // Test close invalid
     cl = syscall_dispatch(5, fd, 0, 0);
     KASSERT(cl == (uint64_t)-EBADF);
-    
+    // FS-005: sys_read with invalid fd returns -EBADF
+    uint64_t bad_fd_ret = syscall_dispatch(4, 99, test_buf, 4);
+    KASSERT(bad_fd_ret == (uint64_t)-EBADF);
     serial_puts("FS-005 Passed.\n");
+    
+    // FS-006: sys_read with count 0 returns 0
+    fd = syscall_dispatch(3, (uint64_t)upath, 0, 0);
+    KASSERT(fd == 3);
+    uint64_t zero_br = syscall_dispatch(4, fd, test_buf, 0);
+    KASSERT(zero_br == 0);
     serial_puts("FS-006 Passed.\n");
+    
+    // FS-008: sys_open with nonexistent file returns -ENOENT
+    upath[0] = 'n'; upath[1] = 'o'; upath[2] = '\0';
+    uint64_t no_fd = syscall_dispatch(3, (uint64_t)upath, 0, 0);
+    KASSERT(no_fd == (uint64_t)-ENOENT);
     serial_puts("FS-008 Passed.\n");
+    
+    // FS-009: sys_close closes open descriptor and invalidates further reads
+    cl = syscall_dispatch(5, fd, 0, 0);
+    KASSERT(cl == 0);
+    bad_fd_ret = syscall_dispatch(4, fd, test_buf, 4);
+    KASSERT(bad_fd_ret == (uint64_t)-EBADF);
     serial_puts("FS-009 Passed.\n");
+    
+    // Clean up test page
+    vmm_unmap_page(&kernel_process->as, test_virt);
+    pmm_free_page(p1);
 }
