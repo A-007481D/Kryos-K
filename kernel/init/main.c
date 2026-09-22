@@ -14,6 +14,7 @@
 #include "../../include/tarfs.h"
 #include "../../include/elf.h"
 #include "../../include/assert.h"
+#include "../../include/blk.h"
 #include "../fs/tty.h"
 #include "../drivers/ps2.h"
 #include "tests.h"
@@ -53,42 +54,42 @@ void kernel_main(uint32_t magic, uint32_t info_addr, uint64_t pml4_phys) {
     blk_init();
     ata_init();
     
-    // Find multiboot module 0 (initrd.tar)
-    uint64_t initrd_start, initrd_end;
-    if (multiboot_get_module(0, &initrd_start, &initrd_end)) {
-        int err = tarfs_mount(initrd_start, initrd_end);
-        if (err < 0) {
-            panic(__FILE__, __LINE__, "Failed to mount TarFS: %d", err);
-        }
-        serial_puts("[PASS] tarfs_mount\n");
-    } else {
-        panic(__FILE__, __LINE__, "No initrd module found!");
+    // Find ATA disk "hda" and mount KFS
+    struct blk_dev *hda = blk_get_dev("hda");
+    if (!hda) {
+        panic(__FILE__, __LINE__, "No hda block device found!");
     }
+
+    extern int kfs_mount(struct blk_dev *dev);
+    int err = kfs_mount(hda);
+    if (err < 0) {
+        panic(__FILE__, __LINE__, "Failed to mount KFS: %d", err);
+    }
+    serial_puts("[PASS] kfs_mount\n");
     
     // Run diagnostic tests
     run_kernel_tests();
     
     // Load /init.elf
     struct file *f = NULL;
-    int err = vfs_open("/init.elf", 0, &f);
+    err = vfs_open("/init.elf", 0, &f);
     if (err < 0) {
         panic(__FILE__, __LINE__, "Failed to open /init.elf: %d", err);
     }
     
-    // Get file size from TarFS private data
-    struct tarfs_file *tfile = (struct tarfs_file *)f->vnode->fs_private;
-    uint64_t elf_size = tfile->size;
-    
-    void *elf_buf = kmalloc(elf_size);
+    // Read the file into a temporary buffer
+    uint64_t max_elf_size = 65536; // 64KB is plenty for init.elf
+    void *elf_buf = kmalloc(max_elf_size);
     if (!elf_buf) {
         panic(__FILE__, __LINE__, "OOM allocating ELF buffer");
     }
     
     size_t bytes_read = 0;
-    err = vfs_read(f, elf_buf, elf_size, &bytes_read);
-    if (err < 0 || bytes_read != elf_size) {
+    err = vfs_read(f, elf_buf, max_elf_size, &bytes_read);
+    if (err < 0 || bytes_read == 0) {
         panic(__FILE__, __LINE__, "Failed to read /init.elf");
     }
+    uint64_t elf_size = bytes_read;
     
     vfs_close(f);
     

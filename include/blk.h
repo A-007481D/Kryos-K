@@ -19,13 +19,15 @@ struct blk_dev {
 };
 
 // Register a new block device
-int blk_register(struct blk_dev *dev);
+void blk_register(struct blk_dev *dev);
 
 // Get a block device by name (e.g., "hda")
-struct blk_dev* blk_get(const char *name);
+struct blk_dev* blk_get_dev(const char *name);
 
 // Initialize the block device subsystem
 void blk_init(void);
 
 // Get the vnode corresponding to a registered block device
 struct vnode* blk_get_vnode(const char *name);
+
+struct blk_dev* blk_get_dev(const char *name);

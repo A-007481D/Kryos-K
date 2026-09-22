@@ -104,15 +104,14 @@ void blk_init(void) {
     }
 }
 
-int blk_register(struct blk_dev *dev) {
-    if (!dev || num_devs >= MAX_BLK_DEVS) return -1;
+void blk_register(struct blk_dev *dev) {
+    if (num_devs >= MAX_BLK_DEVS) return;
     registered_devs[num_devs++] = dev;
-    return 0;
 }
 
-struct blk_dev* blk_get(const char *name) {
+struct blk_dev* blk_get_dev(const char *name) {
     for (int i = 0; i < num_devs; i++) {
-        if (registered_devs[i] && strcmp(registered_devs[i]->name, name) == 0) {
+        if (strcmp(registered_devs[i]->name, name) == 0) {
             return registered_devs[i];
         }
     }
@@ -120,7 +119,7 @@ struct blk_dev* blk_get(const char *name) {
 }
 
 struct vnode* blk_get_vnode(const char *name) {
-    struct blk_dev *dev = blk_get(name);
+    struct blk_dev *dev = blk_get_dev(name);
     if (!dev) return NULL;
     
     struct vnode *vn = (struct vnode*)kmalloc(sizeof(struct vnode));

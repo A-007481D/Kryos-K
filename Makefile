@@ -47,12 +47,13 @@ OBJS = \
     $(BUILD_DIR)/kernel/fs/vt.o \
     $(BUILD_DIR)/kernel/fs/tty.o \
     $(BUILD_DIR)/kernel/fs/blk.o \
+    $(BUILD_DIR)/kernel/fs/kfs.o \
     $(BUILD_DIR)/kernel/syscall/syscall.o \
     $(BUILD_DIR)/arch/x86_64/syscall/syscall_entry.o \
     $(BUILD_DIR)/kernel/tests/test_elf.o \
     $(BUILD_DIR)/kernel/tests/test_syscall.o \
     $(BUILD_DIR)/kernel/tests/test_process_hierarchy.o \
-    $(BUILD_DIR)/kernel/tests/test_tarfs.o \
+    $(BUILD_DIR)/kernel/tests/test_kfs.o \
     $(BUILD_DIR)/kernel/tests/test_vfs.o \
     $(BUILD_DIR)/kernel/tests/test_syscall_fs.o \
     $(BUILD_DIR)/kernel/tests/test_framework.o \
@@ -109,25 +110,34 @@ $(BUILD_DIR)/user/bin/%.elf: user/bin/%.c $(BUILD_DIR)/user/libkryos.a
 $(INITRD): $(USER_BINARIES)
 	tar -cf $@ -C $(BUILD_DIR)/user/bin init.elf hello.elf test_exec.elf test_alloc.elf test_tty.elf ls.elf shell.elf test_blk.elf
 
-$(DISK_IMG):
+disk: $(USER_BINARIES)
 	@mkdir -p $(BUILD_DIR)
-	dd if=/dev/zero of=$@ bs=1M count=16
+	@if [ ! -f $(DISK_IMG) ]; then \
+		echo "Creating KFS disk.img..."; \
+		python3 scripts/mkfs_kfs.py $(DISK_IMG) $(USER_BINARIES); \
+	fi
+
+disk-format: $(USER_BINARIES)
+	@mkdir -p $(BUILD_DIR)
+	@echo "Formatting KFS disk.img..."
+	python3 scripts/mkfs_kfs.py $(DISK_IMG) $(USER_BINARIES)
+
+$(DISK_IMG): disk
 
 iso: $(KERNEL_ISO)
 
-$(KERNEL_ISO): $(KERNEL_ELF) $(INITRD) boot/grub/grub.cfg
+$(KERNEL_ISO): $(KERNEL_ELF) boot/grub/grub.cfg
 	@mkdir -p $(ISO_DIR)/boot/grub
 	@mkdir -p $(ISO_DIR)/boot/modules
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/kryos.elf
-	cp $(INITRD) $(ISO_DIR)/boot/modules/initrd.tar
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	grub-mkrescue -o $(KERNEL_ISO) $(ISO_DIR)
 
 run: iso $(DISK_IMG)
-	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -display none
+	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -d guest_errors -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 debug: iso $(DISK_IMG)
-	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -display none -s -S
+	qemu-system-x86_64 -cdrom $(KERNEL_ISO) -drive file=$(DISK_IMG),format=raw,index=0,media=disk -serial stdio -d guest_errors -device isa-debug-exit,iobase=0xf4,iosize=0x04 -s -S
 
 clean:
 	rm -rf $(BUILD_DIR)

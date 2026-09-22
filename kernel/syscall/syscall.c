@@ -334,9 +334,8 @@ static uint64_t sys_spawn(const char *path, const char *argv[], const char *envp
         return (uint64_t)err;
     }
     
-    struct tarfs_file *tfile = (struct tarfs_file *)f->vnode->fs_private;
-    uint64_t elf_size = tfile->size;
-    void *elf_buf = kmalloc(elf_size);
+    uint64_t max_elf_size = 65536;
+    void *elf_buf = kmalloc(max_elf_size);
     if (!elf_buf) {
         vfs_close(f);
         if (kargv != (char**)default_argv) free_kernel_string_array(kargv, argc);
@@ -345,7 +344,8 @@ static uint64_t sys_spawn(const char *path, const char *argv[], const char *envp
     }
     
     size_t bytes_read = 0;
-    vfs_read(f, elf_buf, elf_size, &bytes_read);
+    vfs_read(f, elf_buf, max_elf_size, &bytes_read);
+    uint64_t elf_size = bytes_read;
     vfs_close(f);
     
     struct process *child = process_create();
@@ -432,9 +432,8 @@ static uint64_t sys_execve(const char *path, const char *argv[], const char *env
         return (uint64_t)err;
     }
     
-    struct tarfs_file *tfile = (struct tarfs_file *)f->vnode->fs_private;
-    uint64_t elf_size = tfile->size;
-    void *elf_buf = kmalloc(elf_size);
+    uint64_t max_elf_size = 65536;
+    void *elf_buf = kmalloc(max_elf_size);
     if (!elf_buf) {
         vfs_close(f);
         if (kargv != (char**)default_argv) free_kernel_string_array(kargv, argc);
@@ -442,7 +441,8 @@ static uint64_t sys_execve(const char *path, const char *argv[], const char *env
         return (uint64_t)-ENOMEM;
     }
     size_t bytes_read = 0;
-    vfs_read(f, elf_buf, elf_size, &bytes_read);
+    vfs_read(f, elf_buf, max_elf_size, &bytes_read);
+    uint64_t elf_size = bytes_read;
     vfs_close(f);
     
     // Create temporary address space
