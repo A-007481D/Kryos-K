@@ -48,22 +48,23 @@ void tty_receive_char(char c) {
             vt_write(active_idx, "\b \b", 3);
         }
     } else if (c == '\n') {
-        if (t->len < TTY_LINE_MAX) {
-            t->buf[t->len++] = '\n';
-            vt_write(active_idx, "\n", 1);
-            
-            // Wake all waiting threads
-            struct thread *curr = t->wait_queue;
-            while (curr) {
-                struct thread *next = curr->next_waiter;
-                curr->state = THREAD_READY;
-                curr->next_waiter = NULL;
-                curr = next;
-            }
-            t->wait_queue = NULL;
+        if (t->len >= TTY_LINE_MAX) {
+            t->len = TTY_LINE_MAX - 1;
         }
+        t->buf[t->len++] = '\n';
+        vt_write(active_idx, "\n", 1);
+        
+        // Wake all waiting threads
+        struct thread *curr = t->wait_queue;
+        while (curr) {
+            struct thread *next = curr->next_waiter;
+            curr->state = THREAD_READY;
+            curr->next_waiter = NULL;
+            curr = next;
+        }
+        t->wait_queue = NULL;
     } else {
-        if (t->len < TTY_LINE_MAX) {
+        if (t->len < TTY_LINE_MAX - 1) {
             t->buf[t->len++] = c;
             char s[1] = {c};
             vt_write(active_idx, s, 1);
