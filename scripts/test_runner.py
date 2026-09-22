@@ -313,11 +313,17 @@ def main():
     print("Verifying persistent disk contents...")
     try:
         with open("build/disk.img", "rb") as f:
-            data = f.read(512)
+            data = f.read(3000)
             if b"KRYOS_PERSISTENT_DATA_PHASE_20" not in data:
-                print("[FAIL] Persistent data not found in build/disk.img")
+                print("[FAIL] Persistent single-sector data not found in build/disk.img")
                 sys.exit(1)
-            print("[PASS] Persistent data verified on disk!")
+            if b"BNDY" not in data:
+                print("[FAIL] Persistent boundary data not found in build/disk.img")
+                sys.exit(1)
+            if b"MULTI_SECTOR_TEST" not in data:
+                print("[FAIL] Persistent multi-sector data not found in build/disk.img")
+                sys.exit(1)
+            print("[PASS] Persistent data verified on disk (single, boundary, multi-sector)!")
     except Exception as e:
         print(f"[FAIL] Could not read disk.img: {e}")
         sys.exit(1)
